@@ -51,6 +51,15 @@ public:
     
     // 清空终端
     void clear();
+    
+    // 获取方法（供UI使用）
+    ui::Theme& getTheme() const { return theme_; }
+    const std::vector<TerminalLine>& getOutputLines() const { return output_lines_; }
+    std::string getUsername() const;
+    std::string getHostname() const;
+    std::string getCurrentDir() const;
+    std::string getGitBranch() const;
+    std::string getCurrentTime() const;
 
 private:
     ui::Theme& theme_;
@@ -79,13 +88,7 @@ private:
     
     // 辅助方法
     void addOutputLine(const std::string& line, bool is_command = false);
-    void updatePrompt();
-    std::string getPrompt() const;
-    std::string getHostname() const;
-    std::string getUsername() const;
-    std::string getCurrentDir() const;
-    std::string getGitBranch() const;  // 获取 Git 分支
-    std::string getCurrentTime() const;  // 获取当前时间
+    std::string buildPrompt() const;  // 构建提示符字符串
     
     // 样式
     ftxui::Color getPromptColor() const;

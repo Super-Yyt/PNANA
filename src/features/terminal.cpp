@@ -108,7 +108,7 @@ void Terminal::handleKeyEvent(const std::string& key) {
 
 void Terminal::executeCommand(const std::string& command) {
     if (command.empty()) {
-        addOutputLine("", false);
+        // 空命令，不添加任何输出，输入行会显示提示符
         return;
     }
     
@@ -121,13 +121,13 @@ void Terminal::executeCommand(const std::string& command) {
     }
     history_index_ = 0;
     
-    // 显示命令
-    addOutputLine(getPrompt() + command, true);
+    // 显示命令（带提示符）
+    addOutputLine(buildPrompt() + command, true);
     
     // 解析命令
     std::vector<std::string> args = parseCommand(command);
     if (args.empty()) {
-        addOutputLine("", false);
+        // 解析失败，不添加提示符（输入行会显示）
         return;
     }
     
@@ -137,10 +137,16 @@ void Terminal::executeCommand(const std::string& command) {
     // 执行内置命令
     std::string result = executeBuiltinCommand(cmd, args);
     if (!result.empty()) {
-        addOutputLine(result, false);
+        // 如果结果包含多行，需要分割
+        std::istringstream iss(result);
+        std::string line;
+        while (std::getline(iss, line)) {
+            addOutputLine(line, false);
+        }
     }
     
-    addOutputLine("", false);
+    // 命令执行完成后，不添加提示符到历史输出
+    // 输入行会始终显示在最后，作为当前输入状态
 }
 
 std::vector<std::string> Terminal::parseCommand(const std::string& command) {
@@ -386,125 +392,10 @@ std::string Terminal::executeSystemCommand(const std::string& command, const std
     return output;
 }
 
-ftxui::Element Terminal::render(int height) {
-    if (!visible_) {
-        return text("");
-    }
-    
-    auto& colors = theme_.getColors();
-    Elements terminal_content;
-    
-    // 输出区域 - 简约风格，无边框
-    Elements output_lines;
-    size_t start_line = 0;
-    if (output_lines_.size() > static_cast<size_t>(height - 2)) {
-        start_line = output_lines_.size() - (height - 2);
-    }
-    
-    for (size_t i = start_line; i < output_lines_.size(); ++i) {
-        const auto& line = output_lines_[i];
-        Color line_color;
-        if (line.is_command) {
-            // 命令使用绿色（类似bash/zsh）
-            line_color = Color::Green;
-        } else {
-            // 输出使用前景色
-            line_color = colors.foreground;
-        }
-        output_lines.push_back(
-            text(line.content) | color(line_color)
-        );
-    }
-    
-    if (output_lines.empty()) {
-        output_lines.push_back(text("") | color(colors.comment));
-    }
-    
-    terminal_content.push_back(
-        vbox(output_lines) | flex
-    );
-    
-    // 输入行 - oh-my-zsh 风格提示符
-    std::string before_cursor = current_input_.substr(0, cursor_position_);
-    std::string cursor_char = cursor_position_ < current_input_.length() ? 
-                              current_input_.substr(cursor_position_, 1) : " ";
-    std::string after_cursor = cursor_position_ < current_input_.length() ? 
-                               current_input_.substr(cursor_position_ + 1) : "";
-    
-    Elements input_elements;
-    
-    // 第一部分：用户名@主机名（绿色）
-    std::string user_host = getUsername() + "@" + getHostname();
-    input_elements.push_back(
-        text(user_host) | color(Color::Green) | bold
-    );
-    
-    // 第二部分：时间戳（浅蓝色）
-    std::string time_str = getCurrentTime();
-    input_elements.push_back(text(" ") | color(Color::White));
-    input_elements.push_back(
-        text(time_str) | color(Color::Cyan) | dim
-    );
-    
-    // 第三部分：目录路径（浅蓝色）
-    std::string dir = getCurrentDir();
-    const char* home = getenv("HOME");
-    if (home && dir.find(home) == 0) {
-        dir = "~" + dir.substr(strlen(home));
-    }
-    // 如果目录名太长，只显示最后一部分
-    if (dir.length() > 30) {
-        size_t last_slash = dir.find_last_of('/');
-        if (last_slash != std::string::npos && last_slash < dir.length() - 1) {
-            dir = "..." + dir.substr(last_slash);
-        }
-    }
-    input_elements.push_back(text(" ") | color(Color::White));
-    input_elements.push_back(
-        text(dir) | color(Color::Cyan)
-    );
-    
-    // 第四部分：Git 分支（红色，如果有）
-    std::string git_branch = getGitBranch();
-    if (!git_branch.empty()) {
-        input_elements.push_back(text(" ") | color(Color::White));
-        input_elements.push_back(
-            text(git_branch) | color(Color::Red) | bold
-        );
-    }
-    
-    // 提示符结束符号
-    input_elements.push_back(text(" ") | color(Color::White));
-    
-    // 用户输入
-    input_elements.push_back(text(before_cursor) | color(colors.foreground));
-    // 块状光标
-    if (cursor_position_ < current_input_.length()) {
-        input_elements.push_back(
-            text(cursor_char) | 
-            bgcolor(colors.foreground) | 
-            color(colors.background) | 
-            bold
-        );
-        input_elements.push_back(text(after_cursor) | color(colors.foreground));
-    } else {
-        // 光标在行尾
-        input_elements.push_back(
-            text(" ") | 
-            bgcolor(colors.foreground) | 
-            color(colors.background) | 
-            bold
-        );
-    }
-    
-    terminal_content.push_back(
-        hbox(input_elements)
-    );
-    
-    // 简约风格：无边框，使用深色背景
-    return vbox(terminal_content) | 
-           size(HEIGHT, EQUAL, height) | 
-           bgcolor(Color::RGB(20, 20, 25));  // 深色终端背景
+ftxui::Element Terminal::render(int /* height */) {
+    // 渲染逻辑已迁移到 ui/terminal_ui.cpp
+    // 这里保留是为了向后兼容，实际应该使用 ui::renderTerminal
+    return text("");  // 占位符，实际不会使用
 }
 
 void Terminal::addOutputLine(const std::string& line, bool is_command) {
@@ -517,9 +408,41 @@ void Terminal::addOutputLine(const std::string& line, bool is_command) {
     }
 }
 
-std::string Terminal::getPrompt() const {
-    // 这个方法现在不再使用，提示符在 render 中直接构建
-    return "";
+std::string Terminal::buildPrompt() const {
+    // 构建提示符字符串（用于输出历史）
+    std::ostringstream oss;
+    
+    // 第一部分：用户名@主机名
+    oss << getUsername() << "@" << getHostname();
+    
+    // 第二部分：时间戳
+    oss << " " << getCurrentTime();
+    
+    // 第三部分：目录路径
+    std::string dir = getCurrentDir();
+    const char* home = getenv("HOME");
+    if (home && dir.find(home) == 0) {
+        dir = "~" + dir.substr(strlen(home));
+    }
+    // 如果目录名太长，只显示最后一部分
+    if (dir.length() > 30) {
+        size_t last_slash = dir.find_last_of('/');
+        if (last_slash != std::string::npos && last_slash < dir.length() - 1) {
+            dir = "..." + dir.substr(last_slash);
+        }
+    }
+    oss << " " << dir;
+    
+    // 第四部分：Git 分支（如果有）
+    std::string git_branch = getGitBranch();
+    if (!git_branch.empty()) {
+        oss << " " << git_branch;
+    }
+    
+    // 提示符结束符号（与输入行保持一致）
+    oss << " > ";
+    
+    return oss.str();
 }
 
 std::string Terminal::getGitBranch() const {
