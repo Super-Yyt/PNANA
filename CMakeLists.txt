@@ -39,12 +39,15 @@ set(SOURCES
     src/ui/help.cpp
     src/ui/dialog.cpp
     src/ui/file_picker.cpp
+    src/ui/split_dialog.cpp
+    src/ui/terminal_ui.cpp
     # 功能模块
     src/features/search.cpp
     src/features/file_browser.cpp
     src/features/syntax_highlighter.cpp
     src/features/command_palette.cpp
     src/features/terminal.cpp
+    src/features/split_view.cpp
 )
 
 # 头文件
@@ -66,6 +69,8 @@ set(HEADERS
     include/pnana/ui/help.h
     include/pnana/ui/dialog.h
     include/pnana/ui/file_picker.h
+    include/pnana/ui/split_dialog.h
+    include/pnana/ui/terminal_ui.h
     include/pnana/ui/icons.h
     # 功能模块头文件
     include/pnana/features/search.h
@@ -73,6 +78,7 @@ set(HEADERS
     include/pnana/features/syntax_highlighter.h
     include/pnana/features/command_palette.h
     include/pnana/features/terminal.h
+    include/pnana/features/split_view.h
 )
 
 # 创建可执行文件
@@ -103,4 +109,3 @@ set_target_properties(pnana PROPERTIES
 install(FILES config/default_config.json
         DESTINATION share/pnana
         OPTIONAL)
-
