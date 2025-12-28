@@ -55,11 +55,18 @@ bool ActionExecutor::execute(KeyAction action) {
         case KeyAction::TOGGLE_HELP:
         case KeyAction::TOGGLE_LINE_NUMBERS:
         case KeyAction::COMMAND_PALETTE:
+        case KeyAction::SPLIT_VIEW:
             return executeViewOperation(action);
             
         case KeyAction::NEXT_TAB:
         case KeyAction::PREV_TAB:
             return executeTabOperation(action);
+            
+        case KeyAction::FOCUS_LEFT_REGION:
+        case KeyAction::FOCUS_RIGHT_REGION:
+        case KeyAction::FOCUS_UP_REGION:
+        case KeyAction::FOCUS_DOWN_REGION:
+            return executeSplitNavigation(action);
             
         case KeyAction::UNKNOWN:
         default:
@@ -207,6 +214,28 @@ bool ActionExecutor::executeViewOperation(KeyAction action) {
             return true;
         case KeyAction::COMMAND_PALETTE:
             editor_->openCommandPalette();
+            return true;
+        case KeyAction::SPLIT_VIEW:
+            editor_->showSplitDialog();
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool ActionExecutor::executeSplitNavigation(KeyAction action) {
+    switch (action) {
+        case KeyAction::FOCUS_LEFT_REGION:
+            editor_->focusLeftRegion();
+            return true;
+        case KeyAction::FOCUS_RIGHT_REGION:
+            editor_->focusRightRegion();
+            return true;
+        case KeyAction::FOCUS_UP_REGION:
+            editor_->focusUpRegion();
+            return true;
+        case KeyAction::FOCUS_DOWN_REGION:
+            editor_->focusDownRegion();
             return true;
         default:
             return false;

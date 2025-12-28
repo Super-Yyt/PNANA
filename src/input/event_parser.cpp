@@ -132,19 +132,25 @@ std::string EventParser::parseNavigationKey(const ftxui::Event& event) const {
 }
 
 std::string EventParser::parseArrowKey(const ftxui::Event& event) const {
+    auto mods = parseModifiers(event);
+    
     if (event == ftxui::Event::ArrowUp) {
+        if (mods.ctrl) return "ctrl_up";
         if (isAlt(event)) return "alt_arrow_up";
         return "arrow_up";
     }
     if (event == ftxui::Event::ArrowDown) {
+        if (mods.ctrl) return "ctrl_down";
         if (isAlt(event)) return "alt_arrow_down";
         return "arrow_down";
     }
     if (event == ftxui::Event::ArrowLeft) {
+        if (mods.ctrl) return "ctrl_left";
         if (isAlt(event)) return "alt_arrow_left";
         return "arrow_left";
     }
     if (event == ftxui::Event::ArrowRight) {
+        if (mods.ctrl) return "ctrl_right";
         if (isAlt(event)) return "alt_arrow_right";
         return "arrow_right";
     }

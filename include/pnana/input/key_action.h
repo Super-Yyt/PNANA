@@ -51,6 +51,7 @@ enum class KeyAction {
     TOGGLE_FILE_BROWSER,
     TOGGLE_HELP,
     TOGGLE_LINE_NUMBERS,
+    SPLIT_VIEW,          // 分屏视图
     
     // 标签页操作
     NEXT_TAB,
@@ -58,6 +59,12 @@ enum class KeyAction {
     
     // 命令面板
     COMMAND_PALETTE,
+    
+    // 分屏导航
+    FOCUS_LEFT_REGION,   // 聚焦左侧区域
+    FOCUS_RIGHT_REGION,  // 聚焦右侧区域
+    FOCUS_UP_REGION,     // 聚焦上方区域
+    FOCUS_DOWN_REGION,   // 聚焦下方区域
     
     // 未知
     UNKNOWN

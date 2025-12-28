@@ -37,8 +37,7 @@ void KeyBindingManager::initializeEditOperationBindings() {
     bindKey("ctrl_v", KeyAction::PASTE);
     bindKey("ctrl_a", KeyAction::SELECT_ALL);
     bindKey("ctrl_d", KeyAction::DUPLICATE_LINE);
-    bindKey("ctrl_l", KeyAction::DELETE_LINE);
-    bindKeyAliases({"ctrl_shift_k"}, KeyAction::DELETE_LINE);
+    bindKey("ctrl_shift_k", KeyAction::DELETE_LINE);
     bindKey("ctrl_backspace", KeyAction::DELETE_WORD);
     bindKey("alt_arrow_up", KeyAction::MOVE_LINE_UP);
     bindKey("alt_arrow_down", KeyAction::MOVE_LINE_DOWN);
@@ -64,6 +63,13 @@ void KeyBindingManager::initializeViewOperationBindings() {
     bindKey("f1", KeyAction::TOGGLE_HELP);
     bindKey("ctrl_shift_l", KeyAction::TOGGLE_LINE_NUMBERS);
     bindKey("f3", KeyAction::COMMAND_PALETTE);
+    // Ctrl+L 现在只在文件浏览器中处理，不在这里绑定
+    
+    // 分屏导航（使用 Ctrl+方向键，类似 tmux）
+    bindKey("ctrl_left", KeyAction::FOCUS_LEFT_REGION);
+    bindKey("ctrl_right", KeyAction::FOCUS_RIGHT_REGION);
+    bindKey("ctrl_up", KeyAction::FOCUS_UP_REGION);
+    bindKey("ctrl_down", KeyAction::FOCUS_DOWN_REGION);
 }
 
 void KeyBindingManager::initializeTabOperationBindings() {

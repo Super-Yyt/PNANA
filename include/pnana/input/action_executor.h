@@ -46,6 +46,9 @@ private:
     
     // 标签页操作
     bool executeTabOperation(KeyAction action);
+    
+    // 分屏导航操作
+    bool executeSplitNavigation(KeyAction action);
 };
 
 } // namespace input
