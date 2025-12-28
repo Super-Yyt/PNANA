@@ -65,6 +65,10 @@ bool FilePicker::handleInput(ftxui::Event event) {
             path_input_ = "";
             loadDirectory();
             return true;
+        } else if (event == Event::Tab) {
+            // Tab 键自动补全路径
+            completePath();
+            return true;
         } else if (event == Event::Backspace) {
             if (!path_input_.empty()) {
                 path_input_.pop_back();
@@ -541,6 +545,156 @@ std::string FilePicker::resolvePath(const std::string& input_path) const {
         return resolved.string();
     } catch (...) {
         return input_path;
+    }
+}
+
+void FilePicker::completePath() {
+    if (path_input_.empty()) {
+        return;
+    }
+    
+    try {
+        std::string input_str = path_input_;
+        bool ends_with_slash = (!input_str.empty() && (input_str.back() == '/' || input_str.back() == '\\'));
+        
+        // 移除末尾的路径分隔符以便解析
+        if (ends_with_slash && input_str.length() > 1) {
+            input_str.pop_back();
+        }
+        
+        fs::path input_path(input_str);
+        fs::path base_dir;
+        std::string partial_name;
+        bool is_absolute = input_path.is_absolute();
+        
+        // 解析路径，找到基础目录和部分名称
+        if (input_path.has_parent_path() && !input_path.filename().empty()) {
+            // 有父路径，提取父目录和最后一个部分
+            base_dir = input_path.parent_path();
+            partial_name = input_path.filename().string();
+            
+            // 如果是相对路径，需要基于当前路径解析
+            if (!is_absolute) {
+                fs::path current_base(current_path_);
+                base_dir = current_base / base_dir;
+            }
+        } else if (ends_with_slash || input_path.filename().empty()) {
+            // 路径以分隔符结尾，表示要补全目录中的内容
+            base_dir = input_path;
+            partial_name = "";
+            
+            if (!is_absolute) {
+                fs::path current_base(current_path_);
+                base_dir = current_base / base_dir;
+            }
+        } else {
+            // 没有父路径，使用当前目录作为基础
+            base_dir = is_absolute ? fs::path("/") : fs::path(current_path_);
+            partial_name = input_path.string();
+        }
+        
+        // 规范化基础目录
+        if (fs::exists(base_dir) && fs::is_directory(base_dir)) {
+            base_dir = fs::canonical(base_dir);
+        } else {
+            // 基础目录不存在，无法补全
+            return;
+        }
+        
+        // 在基础目录中查找匹配的文件/目录
+        std::vector<std::string> matches;
+        
+        try {
+            for (const auto& entry : fs::directory_iterator(base_dir)) {
+                std::string name = entry.path().filename().string();
+                
+                // 如果部分名称为空，显示所有项（但通常不会发生）
+                if (partial_name.empty()) {
+                    matches.push_back(name);
+                } else {
+                    // 检查是否匹配部分名称（不区分大小写）
+                    if (name.length() >= partial_name.length()) {
+                        std::string name_prefix = name.substr(0, partial_name.length());
+                        std::string partial_lower = partial_name;
+                        std::string name_prefix_lower = name_prefix;
+                        
+                        // 转换为小写进行比较（类似 shell 的行为）
+                        std::transform(partial_lower.begin(), partial_lower.end(), partial_lower.begin(), ::tolower);
+                        std::transform(name_prefix_lower.begin(), name_prefix_lower.end(), name_prefix_lower.begin(), ::tolower);
+                        
+                        if (name_prefix_lower == partial_lower) {
+                            matches.push_back(name);
+                        }
+                    }
+                }
+            }
+        } catch (...) {
+            // 读取目录失败
+            return;
+        }
+        
+        if (matches.empty()) {
+            // 没有匹配项，不做任何操作
+            return;
+        }
+        
+        // 排序匹配项
+        std::sort(matches.begin(), matches.end());
+        
+        if (matches.size() == 1) {
+            // 唯一匹配，直接补全
+            std::string completed_name = matches[0];
+            fs::path completed_path = base_dir / completed_name;
+            
+            // 构建补全后的路径，保持原始路径的格式（绝对/相对）
+            fs::path result_path;
+            if (input_path.has_parent_path()) {
+                result_path = input_path.parent_path() / completed_name;
+            } else {
+                result_path = fs::path(completed_name);
+            }
+            
+            // 如果是目录，添加路径分隔符
+            if (fs::is_directory(completed_path)) {
+                path_input_ = result_path.string() + "/";
+            } else {
+                path_input_ = result_path.string();
+            }
+            updatePathFromInput();
+        } else {
+            // 多个匹配，补全共同前缀
+            std::string common_prefix = matches[0];
+            
+            // 找到所有匹配项的共同前缀
+            for (size_t i = 1; i < matches.size(); ++i) {
+                const std::string& current = matches[i];
+                size_t j = 0;
+                while (j < common_prefix.length() && j < current.length() &&
+                       std::tolower(common_prefix[j]) == std::tolower(current[j])) {
+                    j++;
+                }
+                common_prefix = common_prefix.substr(0, j);
+                
+                if (common_prefix.empty()) {
+                    break;
+                }
+            }
+            
+            // 如果共同前缀比部分名称长，补全到共同前缀
+            if (common_prefix.length() > partial_name.length()) {
+                fs::path result_path;
+                if (input_path.has_parent_path()) {
+                    result_path = input_path.parent_path() / common_prefix;
+                } else {
+                    result_path = fs::path(common_prefix);
+                }
+                path_input_ = result_path.string();
+                updatePathFromInput();
+            }
+            // 如果共同前缀等于部分名称，不做任何操作（已经有多个匹配）
+        }
+    } catch (...) {
+        // 补全失败，不做任何操作
     }
 }
 
