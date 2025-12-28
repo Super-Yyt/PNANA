@@ -28,7 +28,7 @@ void printHelp() {
     std::cout << "  Ctrl+Z    Undo\n";
     std::cout << "  Ctrl+Y    Redo\n";
     std::cout << "\nFor more information, visit:\n";
-    std::cout << "https://github.com/yourrepo/pnana\n";
+    std::cout << "https://github.com/Cyxuan0311/PNANA.git\n";
 }
 
 void printVersion() {
