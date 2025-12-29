@@ -48,6 +48,7 @@ enum class KeyAction {
     
     // 视图操作
     TOGGLE_THEME_MENU,
+    SSH_CONNECT,  // SSH 远程文件编辑
     TOGGLE_FILE_BROWSER,
     TOGGLE_HELP,
     TOGGLE_LINE_NUMBERS,
