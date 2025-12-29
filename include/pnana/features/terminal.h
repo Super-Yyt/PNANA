@@ -34,6 +34,9 @@ public:
     void handleInput(const std::string& input);
     void handleKeyEvent(const std::string& key);
     
+    // Tab 补全
+    bool handleTabCompletion();
+    
     // 执行命令
     void executeCommand(const std::string& command);
     
@@ -81,9 +84,10 @@ private:
     // 当前工作目录
     std::string current_directory_;
     
-    // 命令执行
+    // 命令执行（保留以保持兼容性，实际已移至各个模块）
     std::string executeBuiltinCommand(const std::string& command, const std::vector<std::string>& args);
     std::string executeSystemCommand(const std::string& command, const std::vector<std::string>& args);
+    std::string executeShellCommand(const std::string& command, bool background = false);
     std::vector<std::string> parseCommand(const std::string& command);
     
     // 辅助方法
