@@ -87,6 +87,8 @@ static void initializeActionInfos() {
         "toggle_file_browser", "Toggle file browser", std::vector<std::string>{"ctrl_o"});
     action_infos_.emplace_back(KeyAction::TOGGLE_HELP, ActionGroup::VIEW_OPS,
         "toggle_help", "Toggle help window", std::vector<std::string>{"f1"});
+    action_infos_.emplace_back(KeyAction::SSH_CONNECT, ActionGroup::VIEW_OPS,
+        "ssh_connect", "SSH Remote File Editor", std::vector<std::string>{"f4"});
     action_infos_.emplace_back(KeyAction::TOGGLE_LINE_NUMBERS, ActionGroup::VIEW_OPS,
         "toggle_line_numbers", "Toggle line numbers", std::vector<std::string>{"ctrl_shift_l"});
     

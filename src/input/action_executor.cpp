@@ -56,6 +56,7 @@ bool ActionExecutor::execute(KeyAction action) {
         case KeyAction::TOGGLE_LINE_NUMBERS:
         case KeyAction::COMMAND_PALETTE:
         case KeyAction::SPLIT_VIEW:
+        case KeyAction::SSH_CONNECT:
             return executeViewOperation(action);
             
         case KeyAction::NEXT_TAB:
@@ -217,6 +218,9 @@ bool ActionExecutor::executeViewOperation(KeyAction action) {
             return true;
         case KeyAction::SPLIT_VIEW:
             editor_->showSplitDialog();
+            return true;
+        case KeyAction::SSH_CONNECT:
+            editor_->showSSHDialog();
             return true;
         default:
             return false;
