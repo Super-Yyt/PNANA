@@ -118,6 +118,7 @@ Detailed documentation and guides are available in the [docs](docs/) folder:
 
 - **[Keyboard Shortcuts Reference](docs/KEYBINDINGS.md)** - Complete shortcut list and usage instructions
 - **[Configuration Documentation](docs/CONFIGURATION.md)** - Detailed configuration options and examples
+- **[Dependencies Documentation](docs/DEPENDENCIES.md)** - Project dependencies and installation guide
 - **[Menu Functions](docs/MENU.md)** - Detailed menu bar function descriptions
 - **[Theme Documentation](docs/THEMES.md)** - Introduction and preview of all themes
 - **[Development Roadmap](docs/ROADMAP.md)** - Version plans and feature roadmap

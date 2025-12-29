@@ -118,6 +118,7 @@ pnana --readonly file.txt
 
 - **[快捷键参考](docs/KEYBINDINGS.md)** - 完整的快捷键列表和使用说明
 - **[配置文档](docs/CONFIGURATION.md)** - 详细的配置选项和示例
+- **[依赖文档](docs/DEPENDENCIES.md)** - 项目依赖说明和安装指南
 - **[菜单功能](docs/MENU.md)** - 菜单栏功能详细说明
 - **[主题文档](docs/THEMES.md)** - 所有主题的介绍和预览
 - **[开发路线图](docs/ROADMAP.md)** - 版本计划和功能路线图
