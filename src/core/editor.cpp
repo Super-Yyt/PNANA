@@ -22,6 +22,7 @@ Editor::Editor()
       dialog_(theme_),
       file_picker_(theme_),
       split_dialog_(theme_),
+      ssh_dialog_(theme_),
       search_engine_(),
       file_browser_(theme_),
       syntax_highlighter_(theme_),
@@ -51,23 +52,70 @@ Editor::Editor()
       status_message_("pnana - Modern Terminal Editor | Ctrl+Q Quit | Ctrl+T Themes | Ctrl+O Files | F1 Help"),
       should_quit_(false),
       screen_(ScreenInteractive::Fullscreen()) {
-    theme_.setTheme("monokai");
+    // 加载配置文件
+    config_manager_.loadConfig();
     
-    // 初始化可用主题列表
-    available_themes_ = {
-        "monokai",
-        "dracula",
-        "solarized-dark",
-        "solarized-light",
-        "onedark",
-        "nord",
-        "gruvbox",
-        "tokyo-night",
-        "catppuccin",
-        "material",
-        "ayu",
-        "github"
-    };
+    // 从配置获取主题名称并应用
+    const auto& config = config_manager_.getConfig();
+    std::string theme_name = config.current_theme;
+    if (theme_name.empty()) {
+        theme_name = config.editor.theme;
+    }
+    if (theme_name.empty()) {
+        theme_name = "monokai"; // 默认主题
+    }
+    theme_.setTheme(theme_name);
+    
+    // 加载自定义主题（如果有）
+    for (const auto& [name, theme_config] : config.custom_themes) {
+        theme_.loadThemeFromConfig(
+            theme_config.background,
+            theme_config.foreground,
+            theme_config.current_line,
+            theme_config.selection,
+            theme_config.line_number,
+            theme_config.line_number_current,
+            theme_config.statusbar_bg,
+            theme_config.statusbar_fg,
+            theme_config.menubar_bg,
+            theme_config.menubar_fg,
+            theme_config.helpbar_bg,
+            theme_config.helpbar_fg,
+            theme_config.helpbar_key,
+            theme_config.keyword,
+            theme_config.string,
+            theme_config.comment,
+            theme_config.number,
+            theme_config.function,
+            theme_config.type,
+            theme_config.operator_color,
+            theme_config.error,
+            theme_config.warning,
+            theme_config.info,
+            theme_config.success
+        );
+        theme_.loadCustomTheme(name, theme_.getColors());
+    }
+    
+    // 初始化可用主题列表（从配置或默认列表）
+    if (!config.available_themes.empty()) {
+        available_themes_ = config.available_themes;
+    } else {
+        available_themes_ = {
+            "monokai",
+            "dracula",
+            "solarized-dark",
+            "solarized-light",
+            "onedark",
+            "nord",
+            "gruvbox",
+            "tokyo-night",
+            "catppuccin",
+            "material",
+            "ayu",
+            "github"
+        };
+    }
     
     // 初始化文件浏览器到当前目录
     file_browser_.openDirectory(".");
@@ -284,6 +332,14 @@ void Editor::handleTerminalInput(Event event) {
         return;
     } else if (event == Event::Delete) {
         terminal_.handleKeyEvent("Delete");
+        return;
+    } else if (event == Event::Tab) {
+        // Tab 补全
+        if (terminal_.handleTabCompletion()) {
+            setStatusMessage("Tab completion applied");
+        } else {
+            setStatusMessage("No completion found");
+        }
         return;
     } else if (event.is_character()) {
         std::string ch = event.character();

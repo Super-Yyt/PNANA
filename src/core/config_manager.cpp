@@ -1,0 +1,265 @@
+#include "core/config_manager.h"
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <cstdlib>
+
+namespace fs = std::filesystem;
+
+namespace pnana {
+namespace core {
+
+ConfigManager::ConfigManager() : loaded_(false) {
+    config_path_ = getUserConfigPath();
+    resetToDefaults();
+}
+
+ConfigManager::~ConfigManager() = default;
+
+std::string ConfigManager::getDefaultConfigPath() {
+    // 返回默认配置文件路径（在项目目录中）
+    return "config/default_config.json";
+}
+
+std::string ConfigManager::getUserConfigPath() {
+    // 获取用户配置目录
+    const char* home = std::getenv("HOME");
+    if (home) {
+        std::string config_dir = std::string(home) + "/.config/pnana";
+        // 确保目录存在
+        fs::create_directories(config_dir);
+        return config_dir + "/config.json";
+    }
+    // 如果无法获取 HOME，使用当前目录
+    return "config.json";
+}
+
+void ConfigManager::resetToDefaults() {
+    config_ = AppConfig();
+    loaded_ = false;
+}
+
+bool ConfigManager::loadConfig(const std::string& config_path) {
+    if (!config_path.empty()) {
+        config_path_ = config_path;
+    }
+    
+    // 如果用户配置文件不存在，尝试加载默认配置
+    if (!fs::exists(config_path_)) {
+        std::string default_path = getDefaultConfigPath();
+        if (fs::exists(default_path)) {
+            config_path_ = default_path;
+        } else {
+            // 使用默认配置
+            resetToDefaults();
+            return true;
+        }
+    }
+    
+    std::ifstream file(config_path_);
+    if (!file.is_open()) {
+        resetToDefaults();
+        return false;
+    }
+    
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    std::string content = buffer.str();
+    file.close();
+    
+    if (parseJSON(content)) {
+        loaded_ = true;
+        return true;
+    }
+    
+    resetToDefaults();
+    return false;
+}
+
+bool ConfigManager::saveConfig(const std::string& config_path) {
+    if (!config_path.empty()) {
+        config_path_ = config_path;
+    }
+    
+    // 确保目录存在
+    fs::path path(config_path_);
+    if (path.has_parent_path()) {
+        fs::create_directories(path.parent_path());
+    }
+    
+    std::ofstream file(config_path_);
+    if (!file.is_open()) {
+        return false;
+    }
+    
+    file << generateJSON();
+    file.close();
+    return true;
+}
+
+// 简单的 JSON 解析器（专门用于配置文件）
+bool ConfigManager::parseJSON(const std::string& json_content) {
+    // 这是一个简化的 JSON 解析器，专门用于配置文件
+    // 移除所有空白字符（除了字符串内的）
+    std::string cleaned;
+    bool in_string = false;
+    for (char c : json_content) {
+        if (c == '"') {
+            in_string = !in_string;
+            cleaned += c;
+        } else if (in_string || (!std::isspace(c) && c != '\n' && c != '\r')) {
+            cleaned += c;
+        }
+    }
+    
+    // 简单的键值对解析
+    // 这里实现一个基本的解析逻辑
+    // 由于 JSON 解析比较复杂，我们使用一个更简单的方法
+    
+    // 查找各个配置段
+    size_t editor_pos = cleaned.find("\"editor\":{");
+    /* size_t display_pos = cleaned.find("\"display\":{"); */
+    /* size_t files_pos = cleaned.find("\"files\":{"); */
+    /* size_t search_pos = cleaned.find("\"search\":{"); */
+    size_t themes_pos = cleaned.find("\"themes\":{");
+    
+    // 解析 editor 配置
+    if (editor_pos != std::string::npos) {
+        // 提取 theme
+        size_t theme_pos = cleaned.find("\"theme\":\"", editor_pos);
+        if (theme_pos != std::string::npos) {
+            theme_pos += 9; // 跳过 "theme":"
+            size_t theme_end = cleaned.find("\"", theme_pos);
+            if (theme_end != std::string::npos) {
+                config_.editor.theme = cleaned.substr(theme_pos, theme_end - theme_pos);
+                config_.current_theme = config_.editor.theme;
+            }
+        }
+        
+        // 提取其他 editor 配置（简化处理）
+        // font_size, tab_size 等
+    }
+    
+    // 解析 themes 配置
+    if (themes_pos != std::string::npos) {
+        // 提取 current theme
+        size_t current_pos = cleaned.find("\"current\":\"", themes_pos);
+        if (current_pos != std::string::npos) {
+            current_pos += 11;
+            size_t current_end = cleaned.find("\"", current_pos);
+            if (current_end != std::string::npos) {
+                config_.current_theme = cleaned.substr(current_pos, current_end - current_pos);
+                config_.editor.theme = config_.current_theme;
+            }
+        }
+        
+        // 解析自定义主题（简化处理）
+        // 这里可以扩展解析 custom 主题
+    }
+    
+    return true;
+}
+
+std::string ConfigManager::generateJSON() const {
+    std::ostringstream oss;
+    oss << "{\n";
+    oss << "  \"editor\": {\n";
+    oss << "    \"theme\": \"" << config_.editor.theme << "\",\n";
+    oss << "    \"font_size\": " << config_.editor.font_size << ",\n";
+    oss << "    \"tab_size\": " << config_.editor.tab_size << ",\n";
+    oss << "    \"insert_spaces\": " << (config_.editor.insert_spaces ? "true" : "false") << ",\n";
+    oss << "    \"word_wrap\": " << (config_.editor.word_wrap ? "true" : "false") << ",\n";
+    oss << "    \"auto_indent\": " << (config_.editor.auto_indent ? "true" : "false") << "\n";
+    oss << "  },\n";
+    oss << "  \"display\": {\n";
+    oss << "    \"show_line_numbers\": " << (config_.display.show_line_numbers ? "true" : "false") << ",\n";
+    oss << "    \"relative_line_numbers\": " << (config_.display.relative_line_numbers ? "true" : "false") << ",\n";
+    oss << "    \"highlight_current_line\": " << (config_.display.highlight_current_line ? "true" : "false") << ",\n";
+    oss << "    \"show_whitespace\": " << (config_.display.show_whitespace ? "true" : "false") << "\n";
+    oss << "  },\n";
+    oss << "  \"files\": {\n";
+    oss << "    \"encoding\": \"" << config_.files.encoding << "\",\n";
+    oss << "    \"line_ending\": \"" << config_.files.line_ending << "\",\n";
+    oss << "    \"trim_trailing_whitespace\": " << (config_.files.trim_trailing_whitespace ? "true" : "false") << ",\n";
+    oss << "    \"insert_final_newline\": " << (config_.files.insert_final_newline ? "true" : "false") << ",\n";
+    oss << "    \"auto_save\": " << (config_.files.auto_save ? "true" : "false") << ",\n";
+    oss << "    \"auto_save_interval\": " << config_.files.auto_save_interval << "\n";
+    oss << "  },\n";
+    oss << "  \"search\": {\n";
+    oss << "    \"case_sensitive\": " << (config_.search.case_sensitive ? "true" : "false") << ",\n";
+    oss << "    \"whole_word\": " << (config_.search.whole_word ? "true" : "false") << ",\n";
+    oss << "    \"regex\": " << (config_.search.regex ? "true" : "false") << ",\n";
+    oss << "    \"wrap_around\": " << (config_.search.wrap_around ? "true" : "false") << "\n";
+    oss << "  },\n";
+    oss << "  \"themes\": {\n";
+    oss << "    \"current\": \"" << config_.current_theme << "\",\n";
+    oss << "    \"available\": [\n";
+    for (size_t i = 0; i < config_.available_themes.size(); ++i) {
+        oss << "      \"" << config_.available_themes[i] << "\"";
+        if (i < config_.available_themes.size() - 1) oss << ",";
+        oss << "\n";
+    }
+    oss << "    ]\n";
+    oss << "  }\n";
+    oss << "}\n";
+    return oss.str();
+}
+
+bool ConfigManager::parseEditorConfig(const std::map<std::string, std::string>& /* data */) {
+    // 实现编辑器配置解析
+    return true;
+}
+
+bool ConfigManager::parseDisplayConfig(const std::map<std::string, std::string>& /* data */) {
+    // 实现显示配置解析
+    return true;
+}
+
+bool ConfigManager::parseFileConfig(const std::map<std::string, std::string>& /* data */) {
+    // 实现文件配置解析
+    return true;
+}
+
+bool ConfigManager::parseSearchConfig(const std::map<std::string, std::string>& /* data */) {
+    // 实现搜索配置解析
+    return true;
+}
+
+bool ConfigManager::parseThemeConfig(const std::map<std::string, std::string>& /* data */) {
+    // 实现主题配置解析
+    return true;
+}
+
+std::vector<int> ConfigManager::parseColorArray(const std::string& /* color_str */) {
+    std::vector<int> result;
+    // 解析 [r, g, b] 格式
+    // 简化实现
+    return result;
+}
+
+std::string ConfigManager::colorArrayToString(const std::vector<int>& color) const {
+    if (color.size() >= 3) {
+        return "[" + std::to_string(color[0]) + "," + 
+               std::to_string(color[1]) + "," + 
+               std::to_string(color[2]) + "]";
+    }
+    return "[0,0,0]";
+}
+
+bool ConfigManager::stringToBool(const std::string& str) {
+    return str == "true" || str == "1";
+}
+
+int ConfigManager::stringToInt(const std::string& str) {
+    try {
+        return std::stoi(str);
+    } catch (...) {
+        return 0;
+    }
+}
+
+} // namespace core
+} // namespace pnana
+

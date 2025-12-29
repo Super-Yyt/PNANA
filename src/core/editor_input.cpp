@@ -21,6 +21,12 @@ void Editor::handleInput(Event event) {
     region_manager_.setTerminalEnabled(terminal_.isVisible());
     region_manager_.setHelpWindowEnabled(show_help_);
     
+    // 如果终端打开，优先处理（包括 Tab 键，不应该被全局快捷键拦截）
+    if (terminal_.isVisible()) {
+        handleTerminalInput(event);
+        return;
+    }
+    
     // 首先检查全局快捷键（在任何模式下都有效，包括对话框打开时）
     // 使用新的输入处理系统
     using namespace pnana::input;
@@ -40,15 +46,19 @@ void Editor::handleInput(Event event) {
         return;
     }
     
-    // 如果终端打开，优先处理
-    if (terminal_.isVisible()) {
-        handleTerminalInput(event);
+    // 如果 SSH 对话框打开，优先处理（类似帮助窗口）
+    if (ssh_dialog_.isVisible()) {
+        if (ssh_dialog_.handleInput(event)) {
+            // 对话框处理了输入（可能是关闭或确认）
+            return;
+        }
+        // 如果对话框仍然打开，继续处理其他输入
         return;
     }
     
     // 如果当前在对话框中，其他快捷键不处理（让对话框处理输入）
     // 但文件选择器可以在任何情况下打开
-    bool in_dialog = show_save_as_ || show_create_folder_ || show_theme_menu_ || show_help_ || split_dialog_.isVisible();
+    bool in_dialog = show_save_as_ || show_create_folder_ || show_theme_menu_ || show_help_ || split_dialog_.isVisible() || ssh_dialog_.isVisible();
     
     // 如果当前在搜索模式，优先处理搜索输入（除了 Escape 和 Return）
     bool in_search_mode = (mode_ == EditorMode::SEARCH);
@@ -149,7 +159,7 @@ void Editor::handleInput(Event event) {
         if (event == Event::Escape || event == Event::F1) {
             show_help_ = false;
             region_manager_.setRegion(EditorRegion::CODE_AREA);
-            setStatusMessage("Help closed | 区域: " + region_manager_.getRegionName());
+            setStatusMessage("Help closed | Region: " + region_manager_.getRegionName());
         }
         return;
     }
@@ -158,7 +168,7 @@ void Editor::handleInput(Event event) {
     if (show_theme_menu_) {
         if (event == Event::Escape) {
             show_theme_menu_ = false;
-            setStatusMessage("Theme selection cancelled | 区域: " + region_manager_.getRegionName());
+            setStatusMessage("Theme selection cancelled | Region: " + region_manager_.getRegionName());
         } else if (event == Event::ArrowUp || event == Event::Character('k')) {
             selectPreviousTheme();
         } else if (event == Event::ArrowDown || event == Event::Character('j')) {
@@ -513,7 +523,7 @@ void Editor::handleSearchMode(Event event) {
                 input_buffer_ += ch;
                 // 实时执行搜索（不移动光标，只高亮）
                 executeSearch(false);
-            }
+    }
         }
     }
     // 其他事件（如方向键等）在搜索模式下被忽略，不会传递到文档编辑
@@ -798,9 +808,9 @@ void Editor::executeSearch(bool move_cursor) {
         if (match) {
             if (move_cursor) {
                 // 只在按 Enter 时移动光标
-                cursor_row_ = match->line;
-                cursor_col_ = match->column;
-                adjustViewOffset();
+            cursor_row_ = match->line;
+            cursor_col_ = match->column;
+            adjustViewOffset();
             }
             
             std::ostringstream oss;

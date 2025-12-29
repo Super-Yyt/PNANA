@@ -4,6 +4,7 @@
 #include "core/document.h"
 #include "core/document_manager.h"
 #include "core/region_manager.h"
+#include "core/config_manager.h"
 #include "input/key_binding_manager.h"
 #include "input/action_executor.h"
 #include "ui/theme.h"
@@ -14,6 +15,7 @@
 #include "ui/dialog.h"
 #include "ui/file_picker.h"
 #include "ui/split_dialog.h"
+#include "ui/ssh_dialog.h"
 #include "features/search.h"
 #include "features/file_browser.h"
 #include "features/syntax_highlighter.h"
@@ -151,6 +153,7 @@ private:
     
     // UI组件
     ui::Theme theme_;
+    core::ConfigManager config_manager_;
     ui::Statusbar statusbar_;
     ui::Helpbar helpbar_;
     ui::Tabbar tabbar_;
@@ -158,6 +161,7 @@ private:
     ui::Dialog dialog_;
     ui::FilePicker file_picker_;
     ui::SplitDialog split_dialog_;
+    ui::SSHDialog ssh_dialog_;
     
     // 功能模块
     features::SearchEngine search_engine_;
@@ -269,6 +273,10 @@ private:
     // 终端
     void toggleTerminal();
     void handleTerminalInput(ftxui::Event event);
+    
+    // SSH 远程文件编辑
+    void showSSHDialog();
+    void handleSSHConnect(const ui::SSHConfig& config);
     
     // 标签页管理
     void closeCurrentTab();

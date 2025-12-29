@@ -117,6 +117,15 @@ Element Editor::renderUI() {
         return dbox(split_elements);
     }
     
+    // 如果 SSH 对话框打开，叠加显示
+    if (ssh_dialog_.isVisible()) {
+        Elements ssh_elements = {
+            main_ui | dim,
+            ssh_dialog_.render() | center
+        };
+        return dbox(ssh_elements);
+    }
+    
     return main_ui;
 }
 
@@ -531,7 +540,7 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
     
     // 渲染带搜索高亮的行内容
     auto renderLineWithHighlights = [&](const std::string& line_content, size_t cursor_pos, bool has_cursor) -> Element {
-        Elements parts;
+            Elements parts;
         auto& colors = theme_.getColors();
         
         if (line_matches.empty()) {
@@ -544,28 +553,28 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                                     line_content.substr(cursor_pos + 1) : "";
                 
                 if (syntax_highlighting_) {
-                    if (!before.empty()) {
-                        parts.push_back(syntax_highlighter_.highlightLine(before));
-                    }
+            if (!before.empty()) {
+                parts.push_back(syntax_highlighter_.highlightLine(before));
+            }
                     if (!content.empty() && cursor_pos < line_content.length()) {
-                        parts.push_back(
-                            text(cursor_char) | 
-                            bgcolor(colors.foreground) | 
-                            color(colors.background) | 
-                            bold
-                        );
-                    } else {
-                        parts.push_back(
-                            text(" ") | 
-                            bgcolor(colors.foreground) | 
-                            color(colors.background) | 
-                            bold
-                        );
-                    }
-                    if (!after.empty()) {
-                        parts.push_back(syntax_highlighter_.highlightLine(after));
-                    }
-                } else {
+                parts.push_back(
+                    text(cursor_char) | 
+                    bgcolor(colors.foreground) | 
+                    color(colors.background) | 
+                    bold
+                );
+            } else {
+                parts.push_back(
+                    text(" ") | 
+                    bgcolor(colors.foreground) | 
+                    color(colors.background) | 
+                    bold
+                );
+            }
+            if (!after.empty()) {
+                parts.push_back(syntax_highlighter_.highlightLine(after));
+            }
+        } else {
                     parts.push_back(text(before) | color(colors.foreground));
                     parts.push_back(
                         text(cursor_char) | 
@@ -574,8 +583,8 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                         bold
                     );
                     parts.push_back(text(after) | color(colors.foreground));
-                }
-            } else {
+        }
+    } else {
                 if (syntax_highlighting_) {
                     parts.push_back(syntax_highlighter_.highlightLine(line_content));
                 } else {
@@ -615,12 +624,12 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                             
                             // 光标位置的字符
                             std::string cursor_char = match_text.substr(before_cursor, 1);
-                            parts.push_back(
-                                text(cursor_char) | 
-                                bgcolor(colors.foreground) | 
-                                color(colors.background) | 
-                                bold
-                            );
+            parts.push_back(
+                text(cursor_char) | 
+                bgcolor(colors.foreground) | 
+                color(colors.background) | 
+                bold
+            );
                             
                             if (after_cursor > 1) {
                                 std::string after = match_text.substr(before_cursor + 1);
@@ -630,7 +639,7 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                                     color(colors.foreground)
                                 );
                             }
-                        } else {
+        } else {
                             // 光标不在匹配内，正常高亮匹配
                             parts.push_back(
                                 text(match_text) | 
@@ -688,7 +697,7 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                                 bold
                             );
                             parts.push_back(text(after) | color(colors.foreground));
-                        }
+        }
                     } else {
                         // 没有光标，正常渲染
                         if (syntax_highlighting_) {
