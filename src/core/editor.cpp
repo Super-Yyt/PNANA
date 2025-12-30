@@ -1,6 +1,11 @@
 // 编辑器核心类实现
 #include "core/editor.h"
 #include "ui/icons.h"
+#include "utils/logger.h"
+#ifdef BUILD_LUA_SUPPORT
+#include "plugins/plugin_manager.h"
+#endif
+#include <iostream>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/component/event.hpp>
 
@@ -23,6 +28,10 @@ Editor::Editor()
       file_picker_(theme_),
       split_dialog_(theme_),
       ssh_dialog_(theme_),
+      welcome_screen_(theme_),
+      theme_menu_(theme_),
+      create_folder_dialog_(theme_),
+      save_as_dialog_(theme_),
       search_engine_(),
       file_browser_(theme_),
       syntax_highlighter_(theme_),
@@ -34,12 +43,9 @@ Editor::Editor()
       view_offset_row_(0),
       view_offset_col_(0),
       show_theme_menu_(false),
-      selected_theme_index_(0),
       show_help_(false),
       show_create_folder_(false),
-      folder_name_input_(""),
       show_save_as_(false),
-      save_as_input_(""),
       selection_active_(false),
       selection_start_row_(0),
       selection_start_col_(0),
@@ -98,10 +104,11 @@ Editor::Editor()
     }
     
     // 初始化可用主题列表（从配置或默认列表）
+    std::vector<std::string> available_themes;
     if (!config.available_themes.empty()) {
-        available_themes_ = config.available_themes;
+        available_themes = config.available_themes;
     } else {
-        available_themes_ = {
+        available_themes = {
             "monokai",
             "dracula",
             "solarized-dark",
@@ -116,12 +123,33 @@ Editor::Editor()
             "github"
         };
     }
+    theme_menu_.setAvailableThemes(available_themes);
     
     // 初始化文件浏览器到当前目录
     file_browser_.openDirectory(".");
     
     // 初始化命令面板
     initializeCommandPalette();
+    
+    // 初始化日志系统
+    utils::Logger::getInstance().initialize("pnana.log");
+    LOG("Editor constructor started");
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 初始化 LSP 客户端
+    LOG("Initializing LSP support...");
+    initializeLsp();
+    // 注意：lsp_enabled_ 在 initializeLsp() 中已经设置，不要重置为 false
+    completion_trigger_delay_ = 0;
+    LOG("LSP initialization completed");
+#endif
+
+#ifdef BUILD_LUA_SUPPORT
+    // 初始化插件系统
+    initializePlugins();
+#endif
+    
+    LOG("Editor constructor completed");
 }
 
 Document* Editor::getCurrentDocument() {
@@ -151,6 +179,11 @@ void Editor::run() {
     });
     
     screen_.Loop(main_component_);
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 清理 LSP 客户端
+    shutdownLsp();
+#endif
 }
 
 // 视图操作
@@ -191,9 +224,10 @@ void Editor::toggleThemeMenu() {
     if (show_theme_menu_) {
         // 找到当前主题的索引
         std::string current = theme_.getCurrentThemeName();
-        for (size_t i = 0; i < available_themes_.size(); ++i) {
-            if (available_themes_[i] == current) {
-                selected_theme_index_ = i;
+        const auto& themes = theme_menu_.getAvailableThemes();
+        for (size_t i = 0; i < themes.size(); ++i) {
+            if (themes[i] == current) {
+                theme_menu_.setSelectedIndex(i);
                 break;
             }
         }
@@ -202,22 +236,29 @@ void Editor::toggleThemeMenu() {
 }
 
 void Editor::selectNextTheme() {
-    if (available_themes_.empty()) return;
-    selected_theme_index_ = (selected_theme_index_ + 1) % available_themes_.size();
+    size_t current_index = theme_menu_.getSelectedIndex();
+    const auto& themes = theme_menu_.getAvailableThemes();
+    if (themes.empty()) return;
+    size_t next_index = (current_index + 1) % themes.size();
+    theme_menu_.setSelectedIndex(next_index);
 }
 
 void Editor::selectPreviousTheme() {
-    if (available_themes_.empty()) return;
-    if (selected_theme_index_ == 0) {
-        selected_theme_index_ = available_themes_.size() - 1;
+    size_t current_index = theme_menu_.getSelectedIndex();
+    const auto& themes = theme_menu_.getAvailableThemes();
+    if (themes.empty()) return;
+    if (current_index == 0) {
+        theme_menu_.setSelectedIndex(themes.size() - 1);
     } else {
-        selected_theme_index_--;
+        theme_menu_.setSelectedIndex(current_index - 1);
     }
 }
 
 void Editor::applySelectedTheme() {
-    if (selected_theme_index_ < available_themes_.size()) {
-        std::string theme_name = available_themes_[selected_theme_index_];
+    const auto& themes = theme_menu_.getAvailableThemes();
+    size_t selected_index = theme_menu_.getSelectedIndex();
+    if (selected_index < themes.size()) {
+        std::string theme_name = themes[selected_index];
         theme_.setTheme(theme_name);
         setStatusMessage("✓ Applied theme: " + theme_name);
     }
@@ -970,6 +1011,16 @@ void Editor::focusDownRegion() {
     }
     setStatusMessage("Focus down region");
 }
+
+#ifdef BUILD_LUA_SUPPORT
+void Editor::initializePlugins() {
+    plugin_manager_ = std::make_unique<plugins::PluginManager>(this);
+    if (!plugin_manager_ || !plugin_manager_->initialize()) {
+        LOG_ERROR("Failed to initialize plugin system");
+        plugin_manager_.reset();
+    }
+}
+#endif // BUILD_LUA_SUPPORT
 
 } // namespace core
 } // namespace pnana

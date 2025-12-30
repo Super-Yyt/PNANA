@@ -2,6 +2,11 @@
 #include "core/editor.h"
 #include "ui/icons.h"
 #include "ui/terminal_ui.h"
+#include "ui/welcome_screen.h"
+#include "ui/theme_menu.h"
+#include "ui/create_folder_dialog.h"
+#include "ui/save_as_dialog.h"
+#include "utils/logger.h"
 #include <ftxui/dom/elements.hpp>
 #include <sstream>
 #include <map>
@@ -62,7 +67,7 @@ Element Editor::renderUI() {
     if (show_theme_menu_) {
         return dbox({
             main_ui,
-            renderThemeMenu() | center
+            theme_menu_.render() | center
         });
     }
     
@@ -70,7 +75,7 @@ Element Editor::renderUI() {
     if (show_create_folder_) {
         return dbox({
             main_ui,
-            renderCreateFolderDialog() | center
+            create_folder_dialog_.render() | center
         });
     }
     
@@ -78,7 +83,7 @@ Element Editor::renderUI() {
     if (show_save_as_) {
         return dbox({
             main_ui,
-            renderSaveAsDialog() | center
+            save_as_dialog_.render() | center
         });
     }
     
@@ -98,6 +103,44 @@ Element Editor::renderUI() {
         };
         return dbox(dialog_elements);
     }
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 如果补全弹窗打开，叠加显示
+    if (completion_popup_.isVisible()) {
+        // 计算补全弹窗的位置（在光标下方）
+        int popup_x = completion_popup_.getPopupX();
+        int popup_y = completion_popup_.getPopupY();
+        
+        // 计算相对于编辑器内容区域的Y位置
+        // 编辑器内容区域从第2行开始（标签栏+分隔符）
+        int editor_start_y = 2;
+        int actual_popup_y = popup_y + editor_start_y;
+        
+        // 使用dbox叠加显示弹窗
+        // 使用hbox和vbox组合来定位弹窗，避免界面抖动
+        Element popup = renderCompletionPopup();
+        
+        // 创建定位容器：左侧空白 + 弹窗 + 右侧空白
+        Element horizontal_layout = hbox({
+            filler() | size(WIDTH, EQUAL, popup_x),
+            popup,
+            filler()
+        });
+        
+        // 创建垂直布局：上方空白 + 弹窗 + 下方空白
+        Element vertical_layout = vbox({
+            filler() | size(HEIGHT, EQUAL, actual_popup_y),
+            horizontal_layout,
+            filler()
+        });
+        
+        Elements completion_elements = {
+            main_ui,
+            vertical_layout
+        };
+        return dbox(completion_elements);
+    }
+#endif
     
     // 如果文件选择器打开，叠加显示
     if (file_picker_.isVisible()) {
@@ -131,6 +174,7 @@ Element Editor::renderUI() {
 
 Element Editor::renderTabbar() {
     auto tabs = document_manager_.getAllTabs();
+    
     // 如果没有文档，显示"Welcome"标签
     if (tabs.empty()) {
         return hbox({
@@ -140,6 +184,7 @@ Element Editor::renderTabbar() {
             text(" ")
         }) | bgcolor(theme_.getColors().menubar_bg);
     }
+    
     return tabbar_.render(tabs);
 }
 
@@ -151,16 +196,17 @@ Element Editor::renderEditor() {
     
     // 单视图渲染（没有分屏）
     Document* doc = getCurrentDocument();
+    
     // 如果没有文档，显示欢迎界面
     if (!doc) {
-        return renderWelcomeScreen();
+        return welcome_screen_.render();
     }
     
     // 如果是新文件且内容为空，也显示欢迎界面
     if (doc->getFilePath().empty() && 
         doc->lineCount() == 1 && 
         doc->getLine(0).empty()) {
-        return renderWelcomeScreen();
+        return welcome_screen_.render();
     }
     
     Elements lines;
@@ -173,16 +219,64 @@ Element Editor::renderEditor() {
     // 如果文件行数大于屏幕高度，保持当前的视图偏移，让用户自己滚动
     if (total_lines > 0 && total_lines <= static_cast<size_t>(screen_height)) {
         // 文件行数少于屏幕高度，从0开始显示所有行（包括最后一行）
-            view_offset_row_ = 0;
-        } 
+        view_offset_row_ = 0;
+    } 
     // 如果文件行数大于屏幕高度，不强制调整视图偏移，保持用户当前的滚动位置
     
     // 计算实际显示的行数范围
     size_t max_lines = std::min(view_offset_row_ + screen_height, total_lines);
     
     // 渲染可见行
-    for (size_t i = view_offset_row_; i < max_lines; ++i) {
-        lines.push_back(renderLine(i, i == cursor_row_));
+    // 限制渲染的行数，避免大文件卡住
+    const size_t MAX_RENDER_LINES = 200;  // 最多渲染200行
+    size_t render_count = std::min(max_lines - view_offset_row_, MAX_RENDER_LINES);
+    
+    try {
+        for (size_t i = view_offset_row_; i < view_offset_row_ + render_count; ++i) {
+            try {
+                // 性能优化：对于超长行，跳过语法高亮
+                std::string line_content = doc->getLine(i);
+                if (line_content.length() > 5000) {
+                    // 超长行，使用简单渲染
+                    Elements simple_line;
+                    if (show_line_numbers_) {
+                        simple_line.push_back(renderLineNumber(i, i == cursor_row_));
+                    }
+                    simple_line.push_back(text(line_content.substr(0, 5000) + "...") | 
+                                         color(theme_.getColors().foreground));
+                    lines.push_back(hbox(simple_line));
+                } else {
+                    lines.push_back(renderLine(i, i == cursor_row_));
+                }
+            } catch (const std::exception& e) {
+                // 如果渲染某一行失败，使用空行替代
+                Elements error_line;
+                if (show_line_numbers_) {
+                    error_line.push_back(text("    ~") | color(theme_.getColors().comment));
+                } else {
+                    error_line.push_back(text("~") | color(theme_.getColors().comment));
+                }
+                lines.push_back(hbox(error_line));
+            } catch (...) {
+                // 如果渲染某一行失败，使用空行替代
+                Elements error_line;
+                if (show_line_numbers_) {
+                    error_line.push_back(text("    ~") | color(theme_.getColors().comment));
+                } else {
+                    error_line.push_back(text("~") | color(theme_.getColors().comment));
+                }
+                lines.push_back(hbox(error_line));
+            }
+        }
+    } catch (const std::exception& e) {
+        // 如果整个渲染循环失败，返回错误信息
+        return vbox({
+            text("Error rendering file: " + std::string(e.what())) | color(Color::Red)
+        });
+    } catch (...) {
+        return vbox({
+            text("Unknown error rendering file") | color(Color::Red)
+        });
     }
     
     // 填充空行
@@ -224,7 +318,7 @@ Element Editor::renderSplitEditor() {
             // 回退到正常渲染
             Document* doc = getCurrentDocument();
             if (!doc) {
-                return renderWelcomeScreen();
+                return welcome_screen_.render();
             }
             // 继续正常渲染流程（会回到 renderEditor，但 hasSplits() 会返回 false）
         } else {
@@ -357,161 +451,6 @@ Element Editor::renderEditorRegion(const features::ViewRegion& region, Document*
     return vbox(lines);
 }
 
-Element Editor::renderWelcomeScreen() {
-    auto& colors = theme_.getColors();
-    
-    Elements welcome_content;
-    
-    // 空行
-    welcome_content.push_back(text(""));
-    welcome_content.push_back(text(""));
-    
-    // Logo和标题
-    welcome_content.push_back(
-        text("  ██████╗ ███╗   ██╗ █████╗ ███╗   ██╗ █████╗ ") 
-        | color(colors.success) | bold | center
-    );
-    welcome_content.push_back(
-        text("  ██╔══██╗████╗  ██║██╔══██╗████╗  ██║██╔══██╗") 
-        | color(colors.success) | bold | center
-    );
-    welcome_content.push_back(
-        text("  ██████╔╝██╔██╗ ██║███████║██╔██╗ ██║███████║") 
-        | color(colors.success) | bold | center
-    );
-    welcome_content.push_back(
-        text("  ██╔═══╝ ██║╚██╗██║██╔══██║██║╚██╗██║██╔══██║") 
-        | color(colors.success) | bold | center
-    );
-    welcome_content.push_back(
-        text("  ██║     ██║ ╚████║██║  ██║██║ ╚████║██║  ██║") 
-        | color(colors.success) | bold | center
-    );
-    welcome_content.push_back(
-        text("  ╚═╝     ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝") 
-        | color(colors.success) | bold | center
-    );
-    
-    welcome_content.push_back(text(""));
-    welcome_content.push_back(
-        text("Modern Terminal Text Editor") 
-        | color(colors.foreground) | center
-    );
-    welcome_content.push_back(
-        text("Version 0.0.3") 
-        | color(colors.comment) | dim | center
-    );
-    
-    welcome_content.push_back(text(""));
-    welcome_content.push_back(text(""));
-    
-    // Start editing hint (highlighted)
-    welcome_content.push_back(
-        hbox({
-            text(" "),
-            text(ui::icons::BULB) | color(colors.warning),
-            text(" Press "),
-            text(" i ") | bgcolor(colors.keyword) | color(colors.background) | bold,
-            text(" to start editing a new document ")
-        }) | color(colors.foreground) | center
-    );
-    
-    welcome_content.push_back(text(""));
-    welcome_content.push_back(text(""));
-    
-    // Quick Start section
-    welcome_content.push_back(
-        hbox({
-            text(ui::icons::ROCKET),
-            text(" Quick Start")
-        }) | color(colors.keyword) | bold | center
-    );
-    welcome_content.push_back(text(""));
-    
-    welcome_content.push_back(
-        hbox({
-            text("  "),
-            text("Ctrl+O") | color(colors.function) | bold,
-            text("  Open file    "),
-            text("Ctrl+N") | color(colors.function) | bold,
-            text("  New file")
-        }) | center
-    );
-    
-    welcome_content.push_back(
-        hbox({
-            text("  "),
-            text("Ctrl+S") | color(colors.function) | bold,
-            text("  Save file    "),
-            text("Ctrl+Q") | color(colors.function) | bold,
-            text("  Quit editor")
-        }) | center
-    );
-    
-    welcome_content.push_back(text(""));
-    
-    // Features section
-    welcome_content.push_back(
-        hbox({
-            text(ui::icons::STAR),
-            text(" Features")
-        }) | color(colors.keyword) | bold | center
-    );
-    welcome_content.push_back(text(""));
-    
-    welcome_content.push_back(
-        hbox({
-            text("  "),
-            text("Ctrl+F") | color(colors.function) | bold,
-            text("  Search       "),
-            text("Ctrl+G") | color(colors.function) | bold,
-            text("  Go to line")
-        }) | center
-    );
-    
-    welcome_content.push_back(
-        hbox({
-            text("  "),
-            text("Ctrl+T") | color(colors.function) | bold,
-            text("  Themes       "),
-            text("Ctrl+Z/Y") | color(colors.function) | bold,
-            text("  Undo/Redo")
-        }) | center
-    );
-    
-    welcome_content.push_back(text(""));
-    welcome_content.push_back(text(""));
-    
-    // 提示信息
-    welcome_content.push_back(
-        hbox({
-            text(ui::icons::BULB),
-            text(" Tip: Just start typing to begin editing!")
-        }) | color(colors.success) | center
-    );
-    
-    welcome_content.push_back(text(""));
-    
-    welcome_content.push_back(
-        text("Press Ctrl+T to choose from 6 beautiful themes") 
-        | color(colors.comment) | dim | center
-    );
-    
-    welcome_content.push_back(text(""));
-    welcome_content.push_back(text(""));
-    
-    // 底部信息
-    welcome_content.push_back(
-        text("─────────────────────────────────────────────────") 
-        | color(colors.comment) | dim | center
-    );
-    welcome_content.push_back(
-        text("Check the bottom bar for more shortcuts") 
-        | color(colors.comment) | dim | center
-    );
-    
-    return vbox(welcome_content) | center | flex;
-}
 
 Element Editor::renderLine(size_t line_num, bool is_current) {
     Elements line_elements;
@@ -523,7 +462,23 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
     }
     
     // 行内容
-    std::string content = getCurrentDocument()->getLine(line_num);
+    Document* doc = getCurrentDocument();
+    if (!doc) {
+        return hbox({text("~") | color(theme_.getColors().comment)});
+    }
+    
+    if (line_num >= doc->lineCount()) {
+        return hbox({text("~") | color(theme_.getColors().comment)});
+    }
+    
+    std::string content;
+    try {
+        content = doc->getLine(line_num);
+    } catch (const std::exception& e) {
+        content = "";
+    } catch (...) {
+        content = "";
+    }
     
     // 获取当前行的搜索匹配
     std::vector<features::SearchMatch> line_matches;
@@ -543,6 +498,10 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
             Elements parts;
         auto& colors = theme_.getColors();
         
+        // 性能优化：如果行太长，限制语法高亮处理
+        const size_t MAX_HIGHLIGHT_LENGTH = 5000;  // 最多处理5000字符
+        bool line_too_long = line_content.length() > MAX_HIGHLIGHT_LENGTH;
+        
         if (line_matches.empty()) {
             // 没有搜索匹配，正常渲染
             if (has_cursor && cursor_pos <= line_content.length()) {
@@ -552,29 +511,38 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                 std::string after = cursor_pos < line_content.length() ? 
                                     line_content.substr(cursor_pos + 1) : "";
                 
-                if (syntax_highlighting_) {
-            if (!before.empty()) {
-                parts.push_back(syntax_highlighter_.highlightLine(before));
-            }
-                    if (!content.empty() && cursor_pos < line_content.length()) {
-                parts.push_back(
-                    text(cursor_char) | 
-                    bgcolor(colors.foreground) | 
-                    color(colors.background) | 
-                    bold
-                );
-            } else {
-                parts.push_back(
-                    text(" ") | 
-                    bgcolor(colors.foreground) | 
-                    color(colors.background) | 
-                    bold
-                );
-            }
-            if (!after.empty()) {
-                parts.push_back(syntax_highlighter_.highlightLine(after));
-            }
-        } else {
+                if (syntax_highlighting_ && !line_too_long) {
+                    // 启用语法高亮（仅当行不太长时）
+                    try {
+                        if (!before.empty()) {
+                            parts.push_back(syntax_highlighter_.highlightLine(before));
+                        }
+                    } catch (...) {
+                        parts.push_back(text(before) | color(colors.foreground));
+                    }
+                    if (cursor_pos < line_content.length()) {
+                        parts.push_back(
+                            text(cursor_char) | 
+                            bgcolor(colors.foreground) | 
+                            color(colors.background) | 
+                            bold
+                        );
+                    } else {
+                        parts.push_back(
+                            text(" ") | 
+                            bgcolor(colors.foreground) | 
+                            color(colors.background) | 
+                            bold
+                        );
+                    }
+                    try {
+                        if (!after.empty()) {
+                            parts.push_back(syntax_highlighter_.highlightLine(after));
+                        }
+                    } catch (...) {
+                        parts.push_back(text(after) | color(colors.foreground));
+                    }
+                } else {
                     parts.push_back(text(before) | color(colors.foreground));
                     parts.push_back(
                         text(cursor_char) | 
@@ -583,10 +551,17 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                         bold
                     );
                     parts.push_back(text(after) | color(colors.foreground));
-        }
-    } else {
-                if (syntax_highlighting_) {
-                    parts.push_back(syntax_highlighter_.highlightLine(line_content));
+                }
+            } else {
+                // 没有光标，渲染整行
+                if (syntax_highlighting_ && !line_too_long) {
+                    // 启用语法高亮（仅当行不太长时）
+                    try {
+                        parts.push_back(syntax_highlighter_.highlightLine(line_content));
+                    } catch (...) {
+                        // 语法高亮失败，使用简单文本
+                        parts.push_back(text(line_content) | color(colors.foreground));
+                    }
                 } else {
                     parts.push_back(text(line_content) | color(colors.foreground));
                 }
@@ -675,9 +650,14 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                         std::string after = before_cursor < segment.length() ? 
                                             segment.substr(before_cursor + 1) : "";
                         
-                        if (syntax_highlighting_) {
-                            if (!before.empty()) {
-                                parts.push_back(syntax_highlighter_.highlightLine(before));
+                        if (syntax_highlighting_ && !line_too_long) {
+                            // 启用语法高亮（仅当行不太长时）
+                            try {
+                                if (!before.empty()) {
+                                    parts.push_back(syntax_highlighter_.highlightLine(before));
+                                }
+                            } catch (...) {
+                                parts.push_back(text(before) | color(colors.foreground));
                             }
                             parts.push_back(
                                 text(cursor_char) | 
@@ -685,8 +665,12 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                                 color(colors.background) | 
                                 bold
                             );
-                            if (!after.empty()) {
-                                parts.push_back(syntax_highlighter_.highlightLine(after));
+                            try {
+                                if (!after.empty()) {
+                                    parts.push_back(syntax_highlighter_.highlightLine(after));
+                                }
+                            } catch (...) {
+                                parts.push_back(text(after) | color(colors.foreground));
                             }
                         } else {
                             parts.push_back(text(before) | color(colors.foreground));
@@ -700,8 +684,13 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
         }
                     } else {
                         // 没有光标，正常渲染
-                        if (syntax_highlighting_) {
-                            parts.push_back(syntax_highlighter_.highlightLine(segment));
+                        if (syntax_highlighting_ && !line_too_long) {
+                            // 启用语法高亮（仅当行不太长时）
+                            try {
+                                parts.push_back(syntax_highlighter_.highlightLine(segment));
+                            } catch (...) {
+                                parts.push_back(text(segment) | color(colors.foreground));
+                            }
                         } else {
                             parts.push_back(text(segment) | color(colors.foreground));
                         }
@@ -715,7 +704,15 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
         return hbox(parts);
     };
     
-    content_elem = renderLineWithHighlights(content, cursor_col_, is_current);
+    try {
+        content_elem = renderLineWithHighlights(content, cursor_col_, is_current);
+    } catch (const std::exception& e) {
+        // 如果高亮失败，使用简单文本
+        content_elem = text(content) | color(theme_.getColors().foreground);
+    } catch (...) {
+        // 如果高亮失败，使用简单文本
+        content_elem = text(content) | color(theme_.getColors().foreground);
+    }
     
     line_elements.push_back(content_elem);
     
@@ -824,93 +821,6 @@ Element Editor::renderFileBrowser() {
     return file_browser_.render(height);
 }
 
-Element Editor::renderThemeMenu() {
-    auto& current_colors = theme_.getColors();
-    Elements theme_items;
-    
-    // 标题栏
-    theme_items.push_back(
-        hbox({
-            text(" "),
-            text(ui::icons::THEME) | color(Color::Cyan),
-            text(" Select Theme ") | bold | color(current_colors.foreground),
-            filler()
-        }) | bgcolor(current_colors.menubar_bg)
-    );
-    theme_items.push_back(separator());
-    
-    // 主题列表
-    for (size_t i = 0; i < available_themes_.size(); ++i) {
-        std::string theme_name = available_themes_[i];
-        
-        // 获取主题颜色预览
-        ui::Theme temp_theme;
-        temp_theme.setTheme(theme_name);
-        auto& theme_colors = temp_theme.getColors();
-        
-        // 创建颜色预览块（显示主要颜色）
-        Elements color_preview_elements = {
-            text("█") | color(theme_colors.background) | bgcolor(theme_colors.background),
-            text("█") | color(theme_colors.keyword) | bgcolor(theme_colors.keyword),
-            text("█") | color(theme_colors.string) | bgcolor(theme_colors.string),
-            text("█") | color(theme_colors.function) | bgcolor(theme_colors.function),
-            text("█") | color(theme_colors.type) | bgcolor(theme_colors.type),
-            text(" ")
-        };
-        auto color_preview = hbox(color_preview_elements);
-        
-        // 主题名称
-        std::string display_name = theme_name;
-        if (theme_name == theme_.getCurrentThemeName()) {
-            display_name += " " + std::string(ui::icons::SUCCESS);
-        }
-        
-        auto name_text = text(display_name);
-        
-        // 选中状态样式
-        if (i == selected_theme_index_) {
-            name_text = name_text | bold | color(current_colors.function);
-            color_preview = color_preview | bgcolor(current_colors.selection);
-        } else {
-            name_text = name_text | color(current_colors.foreground);
-        }
-        
-        // 组合行
-        Elements row_elements = {
-            text(" "),
-            (i == selected_theme_index_ ? text("►") | color(current_colors.function) : text(" ")),
-            text(" "),
-            color_preview,
-            text(" "),
-            name_text,
-            filler()
-        };
-        theme_items.push_back(
-            hbox(row_elements) | (i == selected_theme_index_ ? bgcolor(current_colors.selection) : bgcolor(current_colors.background))
-        );
-    }
-    
-    theme_items.push_back(separator());
-    
-    // 底部提示
-    theme_items.push_back(
-        hbox({
-            text(" "),
-            text("↑↓: Navigate") | color(current_colors.comment),
-            text("  "),
-            text("Enter: Apply") | color(current_colors.comment),
-            text("  "),
-            text("Esc: Cancel") | color(current_colors.comment),
-            filler()
-        }) | bgcolor(current_colors.menubar_bg)
-    );
-    
-    return vbox(theme_items) 
-        | border
-        | bgcolor(current_colors.background)
-        | size(WIDTH, GREATER_THAN, 50)
-        | size(HEIGHT, GREATER_THAN, 16);
-}
 
 Element Editor::renderHelp() {
     int width = screen_.dimx();
@@ -918,147 +828,7 @@ Element Editor::renderHelp() {
     return help_.render(width, height);
 }
 
-Element Editor::renderCreateFolderDialog() {
-    auto& colors = theme_.getColors();
-    
-    Elements dialog_content;
-    
-    // 标题
-    dialog_content.push_back(
-        hbox({
-            text(" "),
-            text(ui::icons::FOLDER) | color(colors.keyword),
-            text(" Create New Folder "),
-            text(" ")
-        }) | bold | bgcolor(colors.menubar_bg) | center
-    );
-    
-    dialog_content.push_back(separator());
-    
-    // 当前目录
-    dialog_content.push_back(text(""));
-    std::string curr_dir = file_browser_.getCurrentDirectory();
-    std::string display_dir = curr_dir.length() > 40 ? 
-        "..." + curr_dir.substr(curr_dir.length() - 37) : curr_dir;
-    dialog_content.push_back(
-        hbox({
-            text("  Location: "),
-            text(display_dir) | color(colors.comment)
-        })
-    );
-    
-    dialog_content.push_back(text(""));
-    
-    // 输入框 - 使用背景色突出显示输入区域，实时显示用户输入
-    std::string folder_input_display = folder_name_input_.empty() ? "_" : folder_name_input_ + "_";
-    dialog_content.push_back(
-        hbox({
-            text("  Folder name: "),
-            text(folder_input_display) | bold | color(colors.foreground) | bgcolor(colors.selection)
-        })
-    );
-    
-    dialog_content.push_back(text(""));
-    dialog_content.push_back(separator());
-    
-    // 提示
-    dialog_content.push_back(
-        hbox({
-            text("  "),
-            text("Enter") | color(colors.function) | bold,
-            text(": Create  "),
-            text("Esc") | color(colors.function) | bold,
-            text(": Cancel  ")
-        }) | dim
-    );
-    
-    return window(
-        text(""),
-        vbox(dialog_content)
-    ) | size(WIDTH, EQUAL, 50) 
-      | size(HEIGHT, EQUAL, 12)
-      | bgcolor(colors.background)
-      | border;
-}
 
-Element Editor::renderSaveAsDialog() {
-    auto& colors = theme_.getColors();
-    
-    Elements dialog_content;
-    
-    // 检查是否为未命名文件
-    Document* doc = getCurrentDocument();
-    bool is_untitled = doc && doc->getFilePath().empty();
-    
-    // 标题 - 根据是否为未命名文件显示不同标题
-    dialog_content.push_back(
-        hbox({
-            text(" "),
-            text(ui::icons::SAVE) | color(colors.keyword),
-            text(is_untitled ? " Save New File " : " Save As "),
-            text(" ")
-        }) | bold | bgcolor(colors.menubar_bg) | center
-    );
-    
-    dialog_content.push_back(separator());
-    
-    // 当前文件信息
-    dialog_content.push_back(text(""));
-    if (doc) {
-        std::string curr_file = doc->getFileName();
-        if (is_untitled) {
-            // 未命名文件：显示提示信息
-            dialog_content.push_back(
-                hbox({
-                    text("  Status: "),
-                    text("[Untitled] - Enter file name") | color(colors.warning)
-                })
-            );
-        } else {
-            // 已命名文件：显示当前文件名
-            dialog_content.push_back(
-                hbox({
-                    text("  Current: "),
-                    text(curr_file) | color(colors.comment)
-                })
-            );
-        }
-    }
-    
-    dialog_content.push_back(text(""));
-    
-    // 输入框 - 根据是否为未命名文件显示不同标签
-    // 使用背景色突出显示输入区域，实时显示用户输入
-    std::string input_display = save_as_input_.empty() ? "_" : save_as_input_ + "_";
-    dialog_content.push_back(
-        hbox({
-            text(is_untitled ? "  File name: " : "  File path: "),
-            text(input_display) | bold | color(colors.foreground) | bgcolor(colors.selection)
-        })
-    );
-    
-    dialog_content.push_back(text(""));
-    dialog_content.push_back(separator());
-    
-    // 提示
-    dialog_content.push_back(
-        hbox({
-            text("  "),
-            text("Enter") | color(colors.function) | bold,
-            text(": Save  "),
-            text("Esc") | color(colors.function) | bold,
-            text(": Cancel  ")
-        }) | dim
-    );
-    
-    return window(
-        text(""),
-        vbox(dialog_content)
-    ) | size(WIDTH, EQUAL, 60) 
-      | size(HEIGHT, EQUAL, 12)
-      | bgcolor(colors.background)
-      | border;
-}
 
 Element Editor::renderCommandPalette() {
     return command_palette_.render();

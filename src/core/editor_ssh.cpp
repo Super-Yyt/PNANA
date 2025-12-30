@@ -1,5 +1,5 @@
 #include "core/editor.h"
-#include "features/ssh_client.h"
+#include "features/ssh/ssh_client.h"
 #include <sstream>
 
 namespace pnana {
@@ -31,8 +31,8 @@ void Editor::handleSSHConnect(const ui::SSHConfig& config) {
     setStatusMessage("SSH: Connecting to " + config.host + "...");
     
     // 创建 SSH 客户端并读取文件
-    features::SSHClient ssh_client;
-    features::SSHResult result = ssh_client.readFile(config);
+    features::ssh::Client ssh_client;
+    features::ssh::Result result = ssh_client.readFile(config);
     
     if (!result.success) {
         setStatusMessage("SSH Error: " + result.error);

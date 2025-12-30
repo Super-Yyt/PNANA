@@ -1,5 +1,7 @@
 // 编辑操作相关实现
 #include "core/editor.h"
+#include "utils/logger.h"
+#include <iostream>
 
 namespace pnana {
 namespace core {
@@ -8,6 +10,33 @@ namespace core {
 void Editor::insertChar(char ch) {
     getCurrentDocument()->insertChar(cursor_row_, cursor_col_, ch);
     cursor_col_++;
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 更新 LSP 文档
+    updateLspDocument();
+    
+    // 触发代码补全（在输入字母、数字、下划线或点号时）
+    // 使用防抖机制，提升编辑流畅度
+    if (lsp_enabled_ && lsp_manager_) {
+        if (std::isalnum(ch) || ch == '_' || ch == '.' || ch == ':' || ch == '-' || ch == '>') {
+            // 使用延迟触发，避免每次输入都立即请求（提升流畅度）
+            completion_trigger_delay_++;
+            // 输入3个字符后触发，进一步提升流畅度
+            if (completion_trigger_delay_ >= 3) {
+                completion_trigger_delay_ = 0;
+                triggerCompletion();
+            }
+        } else if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '(' || ch == '[' || ch == '{') {
+            // 空格、制表符、换行、括号时隐藏补全弹窗
+            completion_popup_.hide();
+            completion_trigger_delay_ = 0;
+        } else {
+            // 其他字符，隐藏补全弹窗并重置延迟
+            completion_popup_.hide();
+            completion_trigger_delay_ = 0;
+        }
+    }
+#endif
 }
 
 void Editor::insertNewline() {
@@ -21,6 +50,13 @@ void Editor::insertNewline() {
     
     cursor_row_++;
     cursor_col_ = 0;
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 更新 LSP 文档
+    updateLspDocument();
+    // 换行时隐藏补全弹窗
+    completion_popup_.hide();
+#endif
     
     // 调整视图偏移，确保新插入的行可见
     adjustViewOffset();
@@ -42,6 +78,13 @@ void Editor::backspace() {
         cursor_row_--;
         cursor_col_ = prev_len;
     }
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 更新 LSP 文档
+    updateLspDocument();
+    // 删除时隐藏补全弹窗
+    completion_popup_.hide();
+#endif
 }
 
 void Editor::deleteLine() {
@@ -246,26 +289,53 @@ void Editor::moveLineDown() {
 }
 
 void Editor::indentLine() {
-    auto& lines = getCurrentDocument()->getLines();
-    if (cursor_row_ >= lines.size()) return;
+    LOG("=== indentLine() called ===");
+    Document* doc = getCurrentDocument();
+    if (!doc) {
+        LOG_ERROR("indentLine() called but getCurrentDocument() returned null!");
+        return;
+    }
+    
+    LOG("Document: " + doc->getFileName());
+    LOG("Cursor position: row=" + std::to_string(cursor_row_) + ", col=" + std::to_string(cursor_col_));
+    
+    auto& lines = doc->getLines();
+    LOG("Document line count: " + std::to_string(lines.size()));
+    
+    if (cursor_row_ >= lines.size()) {
+        LOG_ERROR("indentLine() cursor_row_ >= lines.size() (" + std::to_string(cursor_row_) + " >= " + std::to_string(lines.size()) + ")");
+        return;
+    }
     
     // Tab 键行为：在光标位置插入4个空格（如果光标在行首或行首空白处，则缩进整行）
     std::string& line = lines[cursor_row_];
+    LOG("Current line length: " + std::to_string(line.length()));
+    LOG("Current line content (first 50 chars): " + line.substr(0, 50));
     
     // 检查光标是否在行首或行首空白处
     size_t first_non_space = line.find_first_not_of(" \t");
     bool at_line_start = (cursor_col_ == 0) || 
                          (first_non_space != std::string::npos && cursor_col_ <= first_non_space);
     
+    LOG("First non-space position: " + std::to_string(first_non_space));
+    LOG("At line start: " + std::string(at_line_start ? "true" : "false"));
+    
     if (at_line_start) {
         // 在行首插入4个空格（缩进整行）
+        LOG("Indenting at line start");
         line = "    " + line;
         cursor_col_ += 4;
+        LOG("New cursor column: " + std::to_string(cursor_col_));
     } else {
         // 在光标位置插入4个空格
+        LOG("Indenting at cursor position");
         line.insert(cursor_col_, "    ");
         cursor_col_ += 4;
+        LOG("New cursor column: " + std::to_string(cursor_col_));
     }
+    
+    doc->setModified(true);
+    LOG("=== indentLine() completed ===");
     
     getCurrentDocument()->setModified(true);
 }

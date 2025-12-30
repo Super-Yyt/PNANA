@@ -2,6 +2,7 @@
 #include "core/editor.h"
 #include "ui/icons.h"
 #include "input/key_action.h"
+#include "utils/logger.h"
 #include <ftxui/component/event.hpp>
 #include <sstream>
 #include <filesystem>
@@ -15,6 +16,13 @@ namespace core {
 
 // 事件处理
 void Editor::handleInput(Event event) {
+    // 记录事件处理开始（仅对关键事件）
+    if (event == Event::Return || event == Event::Escape || 
+        event == Event::ArrowUp || event == Event::ArrowDown ||
+        event == Event::ArrowLeft || event == Event::ArrowRight) {
+        LOG("handleInput() called for event: " + event.input());
+    }
+    
     // 更新区域可用性
     region_manager_.setTabAreaEnabled(document_manager_.getDocumentCount() > 1);
     region_manager_.setFileBrowserEnabled(file_browser_.isVisible());
@@ -30,7 +38,37 @@ void Editor::handleInput(Event event) {
     // 首先检查全局快捷键（在任何模式下都有效，包括对话框打开时）
     // 使用新的输入处理系统
     using namespace pnana::input;
+    
+    // 检查是否是 Tab 键
+    if (event == Event::Tab) {
+        LOG("=== Tab key pressed ===");
+        LOG("Current region: " + region_manager_.getRegionName());
+        LOG("File browser visible: " + std::string(file_browser_.isVisible() ? "true" : "false"));
+        LOG("Command palette open: " + std::string(command_palette_.isOpen() ? "true" : "false"));
+        Document* doc = getCurrentDocument();
+        LOG("Current document: " + std::string(doc ? doc->getFileName() : "null"));
+        LOG("Cursor position: row=" + std::to_string(cursor_row_) + ", col=" + std::to_string(cursor_col_));
+    }
+    
     KeyAction action = key_binding_manager_.getAction(event);
+    
+    if (event == Event::Tab) {
+        LOG("Tab key action resolved to: " + std::to_string(static_cast<int>(action)));
+        LOG("INDENT_LINE enum value: " + std::to_string(static_cast<int>(KeyAction::INDENT_LINE)));
+        LOG("UNKNOWN enum value: " + std::to_string(static_cast<int>(KeyAction::UNKNOWN)));
+        
+        // 检查事件解析 - 直接查找 "tab" 键
+        KeyAction tab_action = key_binding_manager_.getActionForKey("tab");
+        LOG("Direct lookup for 'tab' key: " + std::to_string(static_cast<int>(tab_action)));
+        
+        // 检查键绑定映射表
+        
+        if (action == KeyAction::UNKNOWN) {
+            LOG_ERROR("Tab key action is UNKNOWN! Event parsing may have failed.");
+            LOG_ERROR("Checking if event is actually Tab: " + std::string(event == Event::Tab ? "yes" : "no"));
+        } else if (action == KeyAction::INDENT_LINE) {
+        }
+    }
     
     // Alt+A (另存为)、Alt+F (创建文件夹) 和 Alt+M (文件选择器) 应该能够在任何情况下工作
     // 包括在对话框中或文件浏览器打开时
@@ -84,19 +122,36 @@ void Editor::handleInput(Event event) {
     if (show_save_as_) {
         if (event == Event::Escape) {
             show_save_as_ = false;
-            save_as_input_ = "";
+            save_as_dialog_.setInput("");
             setStatusMessage("Save as cancelled");
         } else if (event == Event::Return) {
-            if (!save_as_input_.empty()) {
+            std::string input = save_as_dialog_.getInput();
+            if (!input.empty()) {
+                // 如果输入的不是完整路径（不包含目录分隔符），则使用当前目录
+                std::string filepath = input;
+                if (input.find('/') == std::string::npos && input.find('\\') == std::string::npos) {
+                    // 只输入了文件名，添加当前目录
+                    Document* doc = getCurrentDocument();
+                    if (doc && !doc->getFilePath().empty()) {
+                        // 使用当前文件的目录
+                        std::filesystem::path current_path(doc->getFilePath());
+                        filepath = (current_path.parent_path() / input).string();
+                    } else {
+                        // 使用文件浏览器的当前目录
+                        filepath = (std::filesystem::path(file_browser_.getCurrentDirectory()) / input).string();
+                    }
+                }
                 // 保存文件
-                if (saveFileAs(save_as_input_)) {
+                if (saveFileAs(filepath)) {
                     show_save_as_ = false;
-                    save_as_input_ = "";
+                    save_as_dialog_.setInput("");
                 }
             }
         } else if (event == Event::Backspace) {
-            if (!save_as_input_.empty()) {
-                save_as_input_.pop_back();
+            std::string input = save_as_dialog_.getInput();
+            if (!input.empty()) {
+                input.pop_back();
+                save_as_dialog_.setInput(input);
             }
         } else if (event.is_character()) {
             std::string ch = event.character();
@@ -104,7 +159,9 @@ void Editor::handleInput(Event event) {
                 char c = ch[0];
                 // 接受所有可打印字符（文件路径可以包含各种字符）
                 if (c >= 32 && c < 127) {
-                    save_as_input_ += c;
+                    std::string input = save_as_dialog_.getInput();
+                    input += c;
+                    save_as_dialog_.setInput(input);
                 }
             }
         }
@@ -115,29 +172,33 @@ void Editor::handleInput(Event event) {
     if (show_create_folder_) {
         if (event == Event::Escape) {
             show_create_folder_ = false;
-            folder_name_input_ = "";
+            create_folder_dialog_.setInput("");
             setStatusMessage("Folder creation cancelled");
         } else if (event == Event::Return) {
-            if (!folder_name_input_.empty()) {
+            std::string input = create_folder_dialog_.getInput();
+            if (!input.empty()) {
                 // 创建文件夹 - 使用C++ filesystem
                 try {
-                    fs::path folder_path = fs::path(file_browser_.getCurrentDirectory()) / folder_name_input_;
+                    fs::path folder_path = fs::path(file_browser_.getCurrentDirectory()) / input;
                     if (fs::create_directory(folder_path)) {
                         show_create_folder_ = false;
-                        std::string created_name = folder_name_input_;
-                        folder_name_input_ = "";
+                        create_folder_dialog_.setInput("");
                         file_browser_.refresh();
-                        setStatusMessage(std::string(ui::icons::FOLDER) + " Folder created: " + created_name);
+                        // 自动选中新创建的文件夹
+                        file_browser_.selectItemByName(input);
+                        setStatusMessage(std::string(ui::icons::FOLDER) + " Folder created: " + input);
                     } else {
-                        setStatusMessage(std::string(ui::icons::ERROR) + " Failed to create folder (may already exist): " + folder_name_input_);
+                        setStatusMessage(std::string(ui::icons::ERROR) + " Failed to create folder (may already exist): " + input);
                     }
                 } catch (const std::exception& e) {
                     setStatusMessage(std::string(ui::icons::ERROR) + " Error: " + std::string(e.what()));
                 }
             }
         } else if (event == Event::Backspace) {
-            if (!folder_name_input_.empty()) {
-                folder_name_input_.pop_back();
+            std::string input = create_folder_dialog_.getInput();
+            if (!input.empty()) {
+                input.pop_back();
+                create_folder_dialog_.setInput(input);
             }
         } else if (event.is_character()) {
             std::string ch = event.character();
@@ -146,7 +207,9 @@ void Editor::handleInput(Event event) {
                 // 只接受可打印ASCII字符，排除文件名禁用字符
                 if ((c >= 32 && c < 127) && c != '/' && c != '\\' && c != ':' && c != '*' && 
                     c != '?' && c != '"' && c != '<' && c != '>' && c != '|') {
-                    folder_name_input_ += c;
+                    std::string input = create_folder_dialog_.getInput();
+                    input += c;
+                    create_folder_dialog_.setInput(input);
                 }
             }
         }
@@ -307,6 +370,18 @@ void Editor::handleNormalMode(Event event) {
     if (getCurrentDocument() == nullptr) {
         return;
     }
+    
+#ifdef BUILD_LSP_SUPPORT
+    // 优先处理补全弹窗的导航键，避免影响代码区光标
+    // 必须在处理其他按键之前检查，确保补全导航优先
+    if (completion_popup_.isVisible()) {
+        if (event == Event::ArrowUp || event == Event::ArrowDown || 
+            event == Event::Return || event == Event::Tab || event == Event::Escape) {
+            handleCompletionInput(event);
+            return;  // 补全弹窗打开时，这些键只用于补全导航，不继续处理
+        }
+    }
+#endif
     
     // Normal mode = editing mode, can input directly
     // Arrow keys - 智能区域导航系统
@@ -485,6 +560,7 @@ void Editor::handleNormalMode(Event event) {
         if (ch.length() == 1) {
             char c = ch[0];
             // 只接受可打印ASCII字符（32-126），排除控制字符
+            // 注意：补全弹窗的导航键（上下键、Return、Tab、Escape）已在函数开头优先处理
             if (c >= 32 && c < 127) {
                 insertChar(c);
             }
@@ -569,17 +645,27 @@ void Editor::handleGotoLineMode(Event event) {
 }
 
 void Editor::handleFileBrowserInput(Event event) {
+    LOG("Event type check - Return: " + std::string(event == Event::Return ? "yes" : "no"));
+    LOG("Event type check - Escape: " + std::string(event == Event::Escape ? "yes" : "no"));
+    LOG("Event input string: '" + event.input() + "'");
+    LOG("Event is_character: " + std::string(event.is_character() ? "yes" : "no"));
+    
     // 确保当前区域是文件浏览器
     if (region_manager_.getCurrentRegion() != EditorRegion::FILE_BROWSER) {
+        LOG("Setting region to FILE_BROWSER");
         region_manager_.setRegion(EditorRegion::FILE_BROWSER);
     }
+    LOG("Current region: " + region_manager_.getRegionName());
     
     // 首先检查是否是全局快捷键（Alt+A, Alt+F 等）
     // 这些快捷键应该在文件浏览器中也能工作
     using namespace pnana::input;
     KeyAction action = key_binding_manager_.getAction(event);
+    LOG("Action resolved: " + std::to_string(static_cast<int>(action)));
     if (action == KeyAction::SAVE_AS || action == KeyAction::CREATE_FOLDER) {
+        LOG("Global shortcut detected, executing...");
         if (action_executor_.execute(action)) {
+            LOG("Global shortcut executed, returning");
             return;
         }
     }
@@ -688,21 +774,74 @@ void Editor::handleFileBrowserInput(Event event) {
         setStatusMessage("File browser closed | Region: " + region_manager_.getRegionName());
     } else if (event == Event::Return) {
         // Enter: toggle expand/collapse for directories, or open file
-        if (file_browser_.toggleSelected()) {
+        LOG("=== File Browser: Return key pressed ===");
+        LOG("Current directory: " + file_browser_.getCurrentDirectory());
+        LOG("Calling file_browser_.toggleSelected()...");
+        bool is_file = file_browser_.toggleSelected();
+        LOG("toggleSelected() returned: " + std::string(is_file ? "true (file)" : "false (directory)"));
+        
+        if (is_file) {
+            LOG("Getting selected file...");
             std::string selected = file_browser_.getSelectedFile();
+            LOG("Selected file path: " + selected);
+            LOG("Selected file length: " + std::to_string(selected.length()));
+            LOG("Selected file empty check: " + std::string(selected.empty() ? "true" : "false"));
+            
             if (!selected.empty()) {
                 // It's a file, open it but keep browser open
-                openFile(selected);
+                LOG("--- Starting file open process ---");
+                LOG("Calling openFile() with path: " + selected);
+                
+                try {
+                    bool open_result = openFile(selected);
+                    LOG("openFile() returned: " + std::string(open_result ? "true" : "false"));
+                    
+                    if (open_result) {
+                        Document* doc = getCurrentDocument();
+                        if (doc) {
+                            LOG("File opened successfully, document pointer: " + std::to_string(reinterpret_cast<uintptr_t>(doc)));
+                            LOG("Document file name: " + doc->getFileName());
+                            LOG("Document file path: " + doc->getFilePath());
+                            LOG("Document line count: " + std::to_string(doc->lineCount()));
                 setStatusMessage(std::string(ui::icons::OPEN) + " Opened: " + 
-                               getCurrentDocument()->getFileName() + " | Press Ctrl+O to close browser | Region: " + 
+                                           doc->getFileName() + " | Press Ctrl+O to close browser | Region: " + 
                                region_manager_.getRegionName());
+                        } else {
+                            LOG_ERROR("openFile() returned true but getCurrentDocument() is null!");
+                            setStatusMessage(std::string(ui::icons::ERROR) + " Failed to open file: Document is null");
+                        }
+                    } else {
+                        LOG_ERROR("openFile() returned false - file open failed");
+                        setStatusMessage(std::string(ui::icons::ERROR) + " Failed to open file");
+                    }
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Exception in openFile(): " + std::string(e.what()));
+                    setStatusMessage(std::string(ui::icons::ERROR) + " Exception: " + std::string(e.what()));
+                } catch (...) {
+                    LOG_ERROR("Unknown exception in openFile()");
+                    setStatusMessage(std::string(ui::icons::ERROR) + " Unknown exception");
+                }
+                
+                LOG("--- File open process completed ---");
+                
+                // 文件打开后，关闭文件浏览器并切换到代码区域
+                file_browser_.setVisible(false);
+                region_manager_.setRegion(EditorRegion::CODE_AREA);
+                LOG("File browser closed and switched to CODE_AREA region after opening file");
+            } else {
+                LOG_WARNING("Selected file path is empty!");
             }
             } else {
             // It's a directory, toggled expand/collapse
+            LOG("Directory toggled, current directory: " + file_browser_.getCurrentDirectory());
                 setStatusMessage(std::string(ui::icons::FOLDER) + " " + 
                                file_browser_.getCurrentDirectory() + " | Region: " + 
                                region_manager_.getRegionName());
         }
+        LOG("=== File Browser: Return key handling completed ===");
+        LOG("File browser visible: " + std::string(file_browser_.isVisible() ? "true" : "false"));
+        LOG("Current region: " + region_manager_.getRegionName());
+        LOG("Document count: " + std::to_string(document_manager_.getDocumentCount()));
     } else if (event == Event::Backspace) {
         // Go to parent directory
         if (file_browser_.goUp()) {
@@ -734,6 +873,7 @@ void Editor::handleFileBrowserInput(Event event) {
     
     // Delete: 删除文件/文件夹
     if (event == Event::Delete) {
+        LOG("Delete key in file browser - deleting file");
         handleDeleteFile();
         return;
     }
