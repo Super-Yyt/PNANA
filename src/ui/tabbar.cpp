@@ -1,4 +1,5 @@
 #include "ui/tabbar.h"
+#include "ui/icons.h"
 
 using namespace ftxui;
 
@@ -46,7 +47,7 @@ Element Tabbar::renderTab(const core::DocumentManager::TabInfo& tab, size_t /*in
     }
     
     // 修改标记
-    std::string modified_mark = tab.is_modified ? " " : "";  // Nerd Font: 圆点表示修改
+    std::string modified_mark = tab.is_modified ? std::string(ui::icons::MODIFIED) + " " : "";
     
     // 构建标签内容
     Elements content;
@@ -56,10 +57,10 @@ Element Tabbar::renderTab(const core::DocumentManager::TabInfo& tab, size_t /*in
     content.push_back(text(display_name));
     
     if (tab.is_modified) {
+        content.push_back(text(" ") | color(colors.warning));
         content.push_back(text(modified_mark) | color(colors.warning));
     }
     
-    content.push_back(text("  "));  // Nerd Font: 关闭图标
     content.push_back(text(" "));
     
     auto tab_element = hbox(content);

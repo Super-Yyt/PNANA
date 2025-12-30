@@ -180,4 +180,3 @@ Element Help::renderCategory(const std::string& category,
 
 } // namespace ui
 } // namespace pnana
-

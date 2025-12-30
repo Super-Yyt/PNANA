@@ -83,6 +83,7 @@ constexpr const char* WORD_WRAP = "\uf0ea";     // nf-fa-arrows_alt (自动换�
 constexpr const char* FULLSCREEN = "\uf065";     // nf-fa-expand (全屏)
 constexpr const char* SPLIT = "\uf0c9";          // nf-fa-columns (分屏)
 constexpr const char* CODE = "\uf121";           // nf-fa-code (代码)
+constexpr const char* FUNCTION = "\uf1c0";       // nf-fa-cube (函数)
 constexpr const char* TAB = "\uf02e";            // nf-fa-tag (标签)
 constexpr const char* SELECT = "\uf0b2";         // nf-fa-mouse_pointer (选择)
 constexpr const char* HIGHLIGHT = "\uf0eb";      // nf-fa-lightbulb_o (语法高亮)
