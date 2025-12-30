@@ -138,6 +138,125 @@ pkg-config --modversion ftxui
 
 ## 可选依赖
 
+### LSP 支持依赖
+
+#### nlohmann/json
+
+**版本要求**: 3.10.0 或更高版本
+
+**说明**: nlohmann/json 是一个现代 C++ JSON 库，用于 LSP (Language Server Protocol) 支持。如果未安装，LSP 功能将被禁用，但编辑器仍可正常使用。
+
+**安装方法**:
+
+##### Ubuntu/Debian
+```bash
+sudo apt install nlohmann-json3-dev
+```
+
+##### Fedora/RHEL
+```bash
+sudo dnf install nlohmann_json-devel
+```
+
+##### macOS
+```bash
+brew install nlohmann-json
+```
+
+##### 从源码安装
+
+如果包管理器中没有，可以从源码安装：
+
+```bash
+git clone https://github.com/nlohmann/json.git
+cd json
+mkdir build && cd build
+cmake .. -DJSON_BuildTests=OFF
+make -j$(nproc)
+sudo make install
+```
+
+**验证安装**:
+```bash
+pkg-config --modversion nlohmann_json
+```
+
+#### jsonrpccxx
+
+**版本要求**: 最新版本
+
+**说明**: jsonrpccxx 是一个 C++ JSON-RPC 库，用于与 LSP 服务器通信。该库已包含在项目的 `third-party/JSON-RPC-CXX` 目录中，无需单独安装。
+
+**注意**: 如果 `third-party/JSON-RPC-CXX` 目录不存在或缺少文件，LSP 支持将被禁用。确保在克隆项目时使用 `--recursive` 选项：
+
+```bash
+git clone --recursive https://github.com/your-repo/pnana.git
+```
+
+如果已经克隆了项目，可以运行：
+
+```bash
+git submodule update --init --recursive
+```
+
+### Lua 插件系统
+
+#### Lua
+
+**版本要求**: Lua 5.3 或 5.4
+
+**说明**: Lua 用于插件系统，允许用户编写 Lua 脚本来扩展编辑器功能。如果未安装 Lua，插件系统将被禁用，但编辑器核心功能仍可正常使用。
+
+**安装方法**:
+
+##### Ubuntu/Debian
+```bash
+# Lua 5.4 (推荐)
+sudo apt install liblua5.4-dev
+
+# 或 Lua 5.3
+sudo apt install liblua5.3-dev
+```
+
+##### Fedora/RHEL
+```bash
+# Lua 5.4
+sudo dnf install lua-devel
+
+# 或指定版本
+sudo dnf install lua5.4-devel
+```
+
+##### macOS
+```bash
+brew install lua
+```
+
+##### 从源码安装
+
+```bash
+# 下载 Lua 5.4
+wget https://www.lua.org/ftp/lua-5.4.6.tar.gz
+tar -xzf lua-5.4.6.tar.gz
+cd lua-5.4.6
+make linux  # 或 make macosx
+sudo make install
+```
+
+**验证安装**:
+```bash
+lua -v
+pkg-config --modversion lua5.4  # 或 lua5.3
+```
+
+**注意**: 安装 Lua 后，需要重新配置 CMake：
+
+```bash
+rm -rf build
+mkdir build && cd build
+cmake ..
+```
+
 ### Go 编译器
 
 **版本要求**: Go 1.21 或更高版本
@@ -235,7 +354,39 @@ sudo dnf install ftxui-devel
 brew install ftxui
 ```
 
-#### 3. （可选）安装 Go
+#### 3. （可选）安装 LSP 支持依赖
+
+```bash
+# Ubuntu/Debian
+sudo apt install nlohmann-json3-dev
+
+# Fedora/RHEL
+sudo dnf install nlohmann_json-devel
+
+# macOS
+brew install nlohmann-json
+```
+
+**注意**: jsonrpccxx 已包含在项目中，无需单独安装。如果使用 git 克隆项目，请确保包含子模块：
+
+```bash
+git submodule update --init --recursive
+```
+
+#### 4. （可选）安装 Lua 插件系统
+
+```bash
+# Ubuntu/Debian
+sudo apt install liblua5.4-dev
+
+# Fedora/RHEL
+sudo dnf install lua-devel
+
+# macOS
+brew install lua
+```
+
+#### 5. （可选）安装 Go
 
 ```bash
 # Ubuntu/Debian
@@ -248,7 +399,7 @@ sudo dnf install golang
 brew install go
 ```
 
-#### 4. 编译项目
+#### 6. 编译项目
 
 ```bash
 ./build.sh
@@ -265,7 +416,10 @@ brew install go
 | GCC | 7.0 | 11.0+ | 必需 |
 | Clang | 5.0 | 14.0+ | 必需 |
 | FTXUI | 最新 | 最新 | 必需 |
-| Go | 1.21 | 1.21+ | 可选 |
+| nlohmann/json | 3.10.0 | 3.11.0+ | 可选（LSP） |
+| jsonrpccxx | 最新 | 最新 | 可选（LSP） |
+| Lua | 5.3 | 5.4 | 可选（插件） |
+| Go | 1.21 | 1.21+ | 可选（SSH） |
 
 ---
 
@@ -278,6 +432,14 @@ brew install go
 ```bash
 cmake .. -DCMAKE_PREFIX_PATH=/usr/local
 ```
+
+### Q: 可以不安装 LSP 支持依赖吗？
+
+**A**: 可以。pnana 可以在没有 nlohmann/json 和 jsonrpccxx 的情况下编译和运行。但 LSP 功能（代码补全、诊断等）将被禁用。编辑器核心功能（编辑、搜索、文件浏览等）仍可正常使用。
+
+### Q: 可以不安装 Lua 吗？
+
+**A**: 可以。pnana 可以在没有 Lua 的情况下编译和运行。但插件系统将被禁用，无法使用 Lua 插件扩展功能。编辑器核心功能仍可正常使用。
 
 ### Q: 可以不安装 Go 吗？
 
@@ -297,8 +459,40 @@ cmake .. -DCMAKE_PREFIX_PATH=/usr/local
 cmake --version
 g++ --version  # 或 clang++ --version
 pkg-config --modversion ftxui  # 如果已安装
-go version  # 可选
+pkg-config --modversion nlohmann_json  # 如果已安装（LSP）
+lua -v  # 如果已安装（插件系统）
+go version  # 可选（SSH）
 ```
+
+### Q: 如何检查 LSP 和插件系统是否已启用？
+
+**A**: 运行 CMake 配置时，会显示功能启用状态：
+
+```bash
+cd build
+cmake ..
+```
+
+查找以下输出：
+- `LSP support enabled` - LSP 功能已启用
+- `✓ Lua found - plugin system enabled` - 插件系统已启用
+- `Go SSH module will be built and linked` - Go SSH 模块已启用
+
+### Q: jsonrpccxx 找不到怎么办？
+
+**A**: jsonrpccxx 是项目的子模块，位于 `third-party/JSON-RPC-CXX`。如果找不到：
+
+1. 确保使用 `--recursive` 克隆项目：
+   ```bash
+   git clone --recursive <repository-url>
+   ```
+
+2. 如果已克隆，更新子模块：
+   ```bash
+   git submodule update --init --recursive
+   ```
+
+3. 如果子模块目录存在但 CMake 仍找不到，检查 `third-party/JSON-RPC-CXX/jsonrpccxx/client.hpp` 是否存在。
 
 ### Q: Windows 上可以编译吗？
 
@@ -306,6 +500,8 @@ go version  # 可选
 - Visual Studio 2017 或更高版本（支持 C++17）
 - CMake 3.10+
 - FTXUI（需要从源码编译或使用 vcpkg）
+- nlohmann/json（可通过 vcpkg 安装）
+- Lua（需要从源码编译或使用 vcpkg）
 
 Windows 支持仍在测试中，建议使用 WSL2 或 Linux/macOS 环境。
 
@@ -344,6 +540,12 @@ go mod tidy
 go mod download
 ```
 
+**jsonrpccxx (子模块)**:
+如果子模块未正确初始化：
+```bash
+git submodule update --init --recursive
+```
+
 ---
 
 ## 依赖关系图
@@ -356,9 +558,18 @@ pnana
 ├── 必需库
 │   └── FTXUI
 └── 可选依赖
-    ├── Go (>= 1.21)
-    │   ├── golang.org/x/crypto
-    │   └── golang.org/x/sys
+    ├── LSP 支持
+    │   ├── nlohmann/json (>= 3.10.0)
+    │   └── jsonrpccxx (子模块)
+    ├── 插件系统
+    │   └── Lua (5.3 或 5.4)
+    ├── SSH 模块
+    │   ├── Go (>= 1.21)
+    │   │   ├── golang.org/x/crypto
+    │   │   └── golang.org/x/sys
+    │   └── 系统库
+    │       ├── pthread
+    │       └── dl
     └── 系统库
         ├── pthread
         └── dl
@@ -367,6 +578,12 @@ pnana
 ---
 
 ## 更新日志
+
+- **v1.0.0**: 更新依赖文档
+  - 添加 LSP 支持依赖（nlohmann/json 和 jsonrpccxx）
+  - 添加 Lua 插件系统依赖
+  - 更新安装指南和常见问题
+  - 更新依赖关系图
 
 - **v0.0.3**: 初始依赖文档
   - 添加 CMake 和 C++ 编译器要求
