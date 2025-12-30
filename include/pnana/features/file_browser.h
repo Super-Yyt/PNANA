@@ -56,7 +56,10 @@ public:
     size_t getSelectedIndex() const { return selected_index_; }  // 获取当前选中索引
     size_t getItemCount() const;  // 获取项目总数
     
-    // 渲染
+    // 获取展平的项目列表（用于 UI 渲染）
+    const std::vector<FileItem*>& getFlatItems() const { return flat_items_; }
+    
+    // 渲染（使用 FileBrowserView）
     ftxui::Element render(int height);
     
     // 显示/隐藏
@@ -72,6 +75,7 @@ public:
     bool renameSelected(const std::string& new_name);
     bool deleteSelected();
     std::string getSelectedName() const;  // 获取选中项的名称（不含路径）
+    bool selectItemByName(const std::string& name);  // 根据名称选中项目
     
 private:
     ui::Theme& theme_;
@@ -85,10 +89,6 @@ private:
     void loadDirectory();
     void loadDirectoryRecursive(FileItem& item);  // 递归加载目录
     void flattenTree(const std::vector<FileItem>& tree, std::vector<FileItem*>& flat, int depth = 0);  // 展平树形结构用于显示
-    std::string getFileIcon(const FileItem& item) const;
-    std::string getFileExtension(const std::string& filename) const;
-    ftxui::Color getFileColor(const FileItem& item) const;
-    std::string truncateMiddle(const std::string& str, size_t max_length) const;
     
     // 树形结构相关
     std::vector<FileItem> tree_items_;  // 树形结构
