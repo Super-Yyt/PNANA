@@ -1,4 +1,5 @@
 #include "core/editor.h"
+#include "utils/logger.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -14,11 +15,13 @@ void printHelp() {
     std::cout << "  -v, --version       Show version information\n";
     std::cout << "  -t, --theme THEME   Set theme (monokai, dracula, nord, etc.)\n";
     std::cout << "  -r, --readonly      Open file in read-only mode\n";
+    std::cout << "  -l, --log           Enable logging to pnana.log file\n";
     std::cout << "\nExamples:\n";
     std::cout << "  pnana                    Start with empty file\n";
     std::cout << "  pnana file.txt           Open file.txt\n";
     std::cout << "  pnana file1 file2        Open multiple files\n";
     std::cout << "  pnana -t dracula file.txt Open with Dracula theme\n";
+    std::cout << "  pnana -l file.txt        Open file with logging enabled\n";
     std::cout << "\nKeyboard Shortcuts:\n";
     std::cout << "  Ctrl+S    Save file\n";
     std::cout << "  Ctrl+Q    Quit\n";
@@ -63,6 +66,7 @@ int main(int argc, char* argv[]) {
         
         std::vector<std::string> files;
         std::string theme = "monokai";
+        bool enable_logging = false;
         
         // 解析命令行参数
         for (int i = 1; i < argc; ++i) {
@@ -84,6 +88,8 @@ int main(int argc, char* argv[]) {
             } else if (arg == "-r" || arg == "--readonly") {
                 // TODO: 实现只读模式
                 std::cerr << "Warning: readonly mode not yet implemented\n";
+            } else if (arg == "-l" || arg == "--log") {
+                enable_logging = true;
             } else if (arg[0] == '-') {
                 std::cerr << "Error: Unknown option: " << arg << "\n";
                 std::cerr << "Try 'pnana --help' for more information.\n";
@@ -91,6 +97,11 @@ int main(int argc, char* argv[]) {
             } else {
                 files.push_back(arg);
             }
+        }
+        
+        // 只有在指定 --log 选项时才初始化日志系统
+        if (enable_logging) {
+            pnana::utils::Logger::getInstance().initialize("pnana.log");
         }
         
         // 创建编辑器
@@ -108,6 +119,11 @@ int main(int argc, char* argv[]) {
         
         // 运行编辑器
         editor.run();
+        
+        // 关闭日志（如果已启用）
+        if (enable_logging) {
+            pnana::utils::Logger::getInstance().close();
+        }
         
         return 0;
         
