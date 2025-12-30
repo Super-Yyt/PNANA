@@ -60,6 +60,23 @@ Abandoning the learning curve of traditional Vim, pnana adopts intuitive shortcu
 #### Syntax Highlighting
 Supports multiple programming languages: C/C++, Python, JavaScript/TypeScript, Java, Go, Rust, Ruby, PHP, HTML/CSS, JSON, XML, Markdown, Shell, SQL, YAML, TOML
 
+#### LSP Support (Language Server Protocol)
+- **Code Completion**: Intelligent code completion for multiple programming languages
+- **Real-time Diagnostics**: Syntax errors and warnings displayed in real-time
+- **Code Navigation**: Jump to definition, find references
+- **Symbol Search**: Quickly find functions, classes, variables, and more
+- **Auto Configuration**: Automatically detects and configures LSP servers
+
+**Detailed LSP Guide**: See [Plugin Documentation](docs/PLUGINS.md)
+
+#### Lua Plugin System
+- **Powerful Extensibility**: Write plugins in Lua to easily extend editor functionality
+- **Rich API**: Complete editor API supporting file operations, cursor control, event listening, and more
+- **Easy to Use**: Inspired by Neovim's design, plugin development is simple and intuitive
+- **Auto Loading**: Plugins are automatically discovered and loaded, no manual configuration needed
+
+**Detailed Plugin Development Guide**: See [Plugin Documentation](docs/PLUGINS.md)
+
 ### 🔧 Configuration System
 Simple JSON configuration file supporting themes, fonts, indentation, and other settings.
 
@@ -77,6 +94,7 @@ Simple JSON configuration file supporting themes, fonts, indentation, and other 
 ```bash
 # Clone repository
 cd /path/to/pnana
+chmod +x ./build.sh
 
 # Build project
 ./build.sh
@@ -118,11 +136,13 @@ Detailed documentation and guides are available in the [docs](docs/) folder:
 
 - **[Keyboard Shortcuts Reference](docs/KEYBINDINGS.md)** - Complete shortcut list and usage instructions
 - **[Configuration Documentation](docs/CONFIGURATION.md)** - Detailed configuration options and examples
+- **[Plugin Development Guide](docs/PLUGINS.md)** - Lua plugin system documentation and LSP usage guide
 - **[Dependencies Documentation](docs/DEPENDENCIES.md)** - Project dependencies and installation guide
 - **[Menu Functions](docs/MENU.md)** - Detailed menu bar function descriptions
 - **[Theme Documentation](docs/THEMES.md)** - Introduction and preview of all themes
 - **[Development Roadmap](docs/ROADMAP.md)** - Version plans and feature roadmap
 - **[Product Comparison](docs/COMPARISON.md)** - Detailed comparison with similar products
+- **[Quick Start Guide](docs/QUICKSTART.md)** - 5-minute quick start guide
 
 
 ## 💡 Why Choose pnana?
@@ -142,7 +162,8 @@ Detailed documentation and guides are available in the [docs](docs/) folder:
 | Mouse Support | ✅ | ⚠️ | ✅ | Requires config |
 | Syntax Highlighting | ✅ | ⚠️ | ✅ | ✅ |
 | Multi-File | ✅ | ❌ | ✅ | ✅ |
-| Plugin System | Planned | ❌ | ✅ | ✅ |
+| Plugin System | ✅ | ❌ | ✅ | ✅ |
+| LSP Support | ✅ | ❌ | ✅ | ✅ |
 | Simple Configuration | ✅ | ✅ | ✅ | ❌ |
 
 **Detailed Comparison**: See [Product Comparison Documentation](docs/COMPARISON.md)
