@@ -97,6 +97,63 @@ else()
     message(STATUS "  After installation, run: rm -rf build && mkdir build && cd build && cmake ..")
 endif()
 
+# 查找 Tree-sitter（语法高亮）
+find_package(TreeSitter QUIET)
+if(TreeSitter_FOUND)
+    set(BUILD_TREE_SITTER_SUPPORT ON)
+    set(TREE_SITTER_LIBRARIES ${TreeSitter_LIBRARIES})
+    set(TREE_SITTER_INCLUDE_DIRS ${TreeSitter_INCLUDE_DIRS})
+    message(STATUS "✓ Tree-sitter found - syntax highlighting enabled")
+    message(STATUS "  Libraries: ${TREE_SITTER_LIBRARIES}")
+    message(STATUS "  Include dirs: ${TREE_SITTER_INCLUDE_DIRS}")
+    if(TreeSitter_VERSION)
+        message(STATUS "  Version: ${TreeSitter_VERSION}")
+    endif()
+    
+    # 查找 Tree-sitter 语言库（可选，但推荐）
+    include(FindTreeSitterLanguages)
+    
+    # 映射语言库变量名（保持兼容性）
+    if(TreeSitter_CPP_FOUND)
+        set(TREE_SITTER_CPP_LIB ${TreeSitter_CPP_LIBRARY})
+    endif()
+    if(TreeSitter_C_FOUND)
+        set(TREE_SITTER_C_LIB ${TreeSitter_C_LIBRARY})
+    endif()
+    if(TreeSitter_PYTHON_FOUND)
+        set(TREE_SITTER_PYTHON_LIB ${TreeSitter_PYTHON_LIBRARY})
+    endif()
+    if(TreeSitter_JAVASCRIPT_FOUND)
+        set(TREE_SITTER_JAVASCRIPT_LIB ${TreeSitter_JAVASCRIPT_LIBRARY})
+    endif()
+    if(TreeSitter_TYPESCRIPT_FOUND)
+        set(TREE_SITTER_TYPESCRIPT_LIB ${TreeSitter_TYPESCRIPT_LIBRARY})
+    endif()
+    if(TreeSitter_JSON_FOUND)
+        set(TREE_SITTER_JSON_LIB ${TreeSitter_JSON_LIBRARY})
+    endif()
+    if(TreeSitter_MARKDOWN_FOUND)
+        set(TREE_SITTER_MARKDOWN_LIB ${TreeSitter_MARKDOWN_LIBRARY})
+    endif()
+    if(TreeSitter_BASH_FOUND)
+        set(TREE_SITTER_BASH_LIB ${TreeSitter_BASH_LIBRARY})
+    endif()
+    if(TreeSitter_RUST_FOUND)
+        set(TREE_SITTER_RUST_LIB ${TreeSitter_RUST_LIBRARY})
+    endif()
+    if(TreeSitter_GO_FOUND)
+        set(TREE_SITTER_GO_LIB ${TreeSitter_GO_LIBRARY})
+    endif()
+    if(TreeSitter_JAVA_FOUND)
+        set(TREE_SITTER_JAVA_LIB ${TreeSitter_JAVA_LIBRARY})
+    endif()
+else()
+    set(BUILD_TREE_SITTER_SUPPORT OFF)
+    message(WARNING "✗ Tree-sitter not found, will use native syntax highlighter")
+    message(STATUS "  Install with: sudo apt install libtree-sitter-dev")
+    message(STATUS "  Or build from source: https://github.com/tree-sitter/tree-sitter")
+endif()
+
 # 查找 Go 编译器
 find_program(GO_EXECUTABLE go)
 if(NOT GO_EXECUTABLE)
@@ -151,7 +208,7 @@ set(SOURCES
     # 功能模块
     src/features/search.cpp
     src/features/file_browser.cpp
-    src/features/syntax_highlighter.cpp
+    src/features/SyntaxHighlighter/syntax_highlighter.cpp
     src/features/command_palette.cpp
     src/features/terminal/terminal.cpp
     src/features/terminal/terminal_parser.cpp
@@ -177,6 +234,13 @@ set(SOURCES
     src/plugins/plugin_manager.cpp
     src/plugins/lua_api.cpp
 )
+
+# Tree-sitter 模块（如果启用）
+if(BUILD_TREE_SITTER_SUPPORT)
+    list(APPEND SOURCES
+        src/features/SyntaxHighlighter/syntax_highlighter_tree_sitter.cpp
+    )
+endif()
 
 # LSP 模块（如果启用）
 if(BUILD_LSP_SUPPORT)
@@ -237,7 +301,7 @@ set(HEADERS
     # 功能模块头文件
     include/pnana/features/search.h
     include/pnana/features/file_browser.h
-    include/pnana/features/syntax_highlighter.h
+    include/pnana/features/SyntaxHighlighter/syntax_highlighter.h
     include/pnana/features/command_palette.h
     include/pnana/features/terminal.h
     include/pnana/features/split_view.h
@@ -248,6 +312,13 @@ set(HEADERS
     include/pnana/plugins/plugin_manager.h
     include/pnana/plugins/lua_api.h
 )
+
+# Tree-sitter 模块头文件（如果启用）
+if(BUILD_TREE_SITTER_SUPPORT)
+    list(APPEND HEADERS
+        include/pnana/features/SyntaxHighlighter/syntax_highlighter_tree_sitter.h
+    )
+endif()
 
 # LSP 模块头文件（如果启用）
 if(BUILD_LSP_SUPPORT)
@@ -338,6 +409,79 @@ if(BUILD_LUA_SUPPORT)
     target_link_libraries(pnana PRIVATE ${LUA_LIBRARIES})
     target_compile_definitions(pnana PRIVATE BUILD_LUA_SUPPORT)
     message(STATUS "Plugin system configured with Lua")
+endif()
+
+# 链接 Tree-sitter 库（如果启用语法高亮）
+if(BUILD_TREE_SITTER_SUPPORT)
+    # 使用导入目标（如果可用）
+    if(TARGET TreeSitter::TreeSitter)
+        target_link_libraries(pnana PRIVATE TreeSitter::TreeSitter)
+    else()
+        target_include_directories(pnana PRIVATE ${TREE_SITTER_INCLUDE_DIRS})
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_LIBRARIES})
+    endif()
+    target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_SUPPORT)
+    
+    # 链接 Tree-sitter 语言库（如果找到）
+    # 注意：如果语言库未找到，对应的语言将使用原生语法高亮器
+    if(TREE_SITTER_CPP_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_CPP_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_CPP)
+        message(STATUS "  ✓ Tree-sitter C++ language support enabled")
+    endif()
+    if(TREE_SITTER_C_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_C_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_C)
+        message(STATUS "  ✓ Tree-sitter C language support enabled")
+    endif()
+    if(TREE_SITTER_PYTHON_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_PYTHON_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_PYTHON)
+        message(STATUS "  ✓ Tree-sitter Python language support enabled")
+    endif()
+    if(TREE_SITTER_JAVASCRIPT_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_JAVASCRIPT_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_JAVASCRIPT)
+        message(STATUS "  ✓ Tree-sitter JavaScript language support enabled")
+    endif()
+    if(TREE_SITTER_TYPESCRIPT_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_TYPESCRIPT_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_TYPESCRIPT)
+        message(STATUS "  ✓ Tree-sitter TypeScript language support enabled")
+    endif()
+    if(TREE_SITTER_JSON_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_JSON_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_JSON)
+        message(STATUS "  ✓ Tree-sitter JSON language support enabled")
+    endif()
+    if(TREE_SITTER_MARKDOWN_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_MARKDOWN_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_MARKDOWN)
+        message(STATUS "  ✓ Tree-sitter Markdown language support enabled")
+    endif()
+    if(TREE_SITTER_BASH_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_BASH_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_BASH)
+        message(STATUS "  ✓ Tree-sitter Bash language support enabled")
+    endif()
+    if(TREE_SITTER_RUST_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_RUST_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_RUST)
+        message(STATUS "  ✓ Tree-sitter Rust language support enabled")
+    endif()
+    if(TREE_SITTER_GO_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_GO_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_GO)
+        message(STATUS "  ✓ Tree-sitter Go language support enabled")
+    endif()
+    if(TREE_SITTER_JAVA_LIB)
+        target_link_libraries(pnana PRIVATE ${TREE_SITTER_JAVA_LIB})
+        target_compile_definitions(pnana PRIVATE BUILD_TREE_SITTER_JAVA)
+        message(STATUS "  ✓ Tree-sitter Java language support enabled")
+    endif()
+    
+    message(STATUS "Tree-sitter syntax highlighting configured")
+    message(STATUS "  Note: Languages without Tree-sitter libraries will use native highlighter")
 endif()
 
 # 安装
