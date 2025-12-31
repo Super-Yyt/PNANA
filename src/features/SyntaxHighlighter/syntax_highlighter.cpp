@@ -1,5 +1,8 @@
 #include "features/SyntaxHighlighter/syntax_highlighter.h"
+// 条件包含 Tree-sitter 头文件（如果启用）
+#ifdef BUILD_TREE_SITTER_SUPPORT
 #include "features/SyntaxHighlighter/syntax_highlighter_tree_sitter.h"
+#endif
 #include <algorithm>
 #include <cctype>
 
@@ -45,6 +48,7 @@ SyntaxHighlighter::SyntaxHighlighter(ui::Theme& theme, SyntaxHighlightBackend ba
     initializeLanguages();
     
     // 如果使用 Tree-sitter 后端且可用，初始化 Tree-sitter
+#ifdef BUILD_TREE_SITTER_SUPPORT
     if (backend_ == SyntaxHighlightBackend::TREE_SITTER && isTreeSitterAvailable()) {
         try {
             tree_sitter_highlighter_ = std::make_unique<SyntaxHighlighterTreeSitter>(theme_);
@@ -56,6 +60,10 @@ SyntaxHighlighter::SyntaxHighlighter(ui::Theme& theme, SyntaxHighlightBackend ba
     } else {
         backend_ = SyntaxHighlightBackend::NATIVE;
     }
+#else
+    // Tree-sitter 未编译，强制使用原生实现
+    backend_ = SyntaxHighlightBackend::NATIVE;
+#endif
 }
 
 SyntaxHighlighter::~SyntaxHighlighter() = default;
@@ -115,6 +123,20 @@ void SyntaxHighlighter::initializeLanguages() {
         "do", "done", "in", "function", "return", "exit", "break", "continue",
         "echo", "export", "source", "cd", "pwd", "ls", "cat", "grep", "sed", "awk"
     };
+    
+    // Lua 关键字
+    keywords_["lua"] = {
+        "and", "break", "do", "else", "elseif", "end", "false", "for",
+        "function", "goto", "if", "in", "local", "nil", "not", "or",
+        "repeat", "return", "then", "true", "until", "while"
+    };
+    
+    types_["lua"] = {
+        "number", "string", "boolean", "table", "function", "thread", "userdata",
+        "nil", "type", "pairs", "ipairs", "next", "tostring", "tonumber",
+        "print", "require", "package", "io", "os", "math", "string", "table",
+        "coroutine", "debug"
+    };
 }
 
 void SyntaxHighlighter::setFileType(const std::string& file_type) {
@@ -122,9 +144,11 @@ void SyntaxHighlighter::setFileType(const std::string& file_type) {
         current_file_type_ = file_type;
         
         // 如果使用 Tree-sitter，更新其文件类型
+#ifdef BUILD_TREE_SITTER_SUPPORT
         if (backend_ == SyntaxHighlightBackend::TREE_SITTER && tree_sitter_highlighter_) {
             tree_sitter_highlighter_->setFileType(file_type);
         }
+#endif
         
         resetMultiLineState();
     }
@@ -141,6 +165,7 @@ ftxui::Element SyntaxHighlighter::highlightLine(const std::string& line) {
     }
     
     // 根据后端选择不同的实现
+#ifdef BUILD_TREE_SITTER_SUPPORT
     if (backend_ == SyntaxHighlightBackend::TREE_SITTER && tree_sitter_highlighter_) {
         try {
             return tree_sitter_highlighter_->highlightLine(line);
@@ -149,6 +174,7 @@ ftxui::Element SyntaxHighlighter::highlightLine(const std::string& line) {
             return highlightLineNative(line);
         }
     }
+#endif
     
     // 使用原生实现
     return highlightLineNative(line);
@@ -208,6 +234,8 @@ std::vector<Token> SyntaxHighlighter::tokenize(const std::string& line) {
         return tokenizeMarkdown(line);
     } else if (current_file_type_ == "shell") {
         return tokenizeShell(line);
+    } else if (current_file_type_ == "lua") {
+        return tokenizeLua(line);
     }
     
     // 默认：不高亮
@@ -1074,6 +1102,140 @@ std::vector<Token> SyntaxHighlighter::tokenizeShell(const std::string& line) {
     return tokens;
 }
 
+std::vector<Token> SyntaxHighlighter::tokenizeLua(const std::string& line) {
+    std::vector<Token> tokens;
+    size_t i = 0;
+    
+    while (i < line.length()) {
+        // 跳过空白
+        if (std::isspace(line[i])) {
+            size_t start = i;
+            while (i < line.length() && std::isspace(line[i])) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::NORMAL, start, i});
+            continue;
+        }
+        
+        // 单行注释
+        if (line[i] == '-' && i + 1 < line.length() && line[i + 1] == '-') {
+            tokens.push_back({line.substr(i), TokenType::COMMENT, i, line.length()});
+            break;
+        }
+        
+        // 多行注释 --[[ ... ]]
+        if (i + 3 < line.length() && line.substr(i, 4) == "--[[") {
+            size_t start = i;
+            i += 4;
+            size_t end_pos = line.find("]]", i);
+            if (end_pos != std::string::npos) {
+                i = end_pos + 2;
+                tokens.push_back({line.substr(start, i - start), TokenType::COMMENT, start, i});
+            } else {
+                tokens.push_back({line.substr(start), TokenType::COMMENT, start, line.length()});
+                break;
+            }
+            continue;
+        }
+        
+        // 字符串（支持单引号和双引号）
+        if (line[i] == '"' || line[i] == '\'') {
+            char quote = line[i];
+            size_t start = i;
+            i++;
+            while (i < line.length()) {
+                if (line[i] == '\\' && i + 1 < line.length()) {
+                    i += 2; // 跳过转义字符
+                } else if (line[i] == quote) {
+                    i++;
+                    break;
+                } else {
+                    i++;
+                }
+            }
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        // 长字符串 [[ ... ]]
+        if (i + 1 < line.length() && line[i] == '[' && line[i + 1] == '[') {
+            size_t start = i;
+            i += 2;
+            size_t end_pos = line.find("]]", i);
+            if (end_pos != std::string::npos) {
+                i = end_pos + 2;
+                tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            } else {
+                tokens.push_back({line.substr(start), TokenType::STRING, start, line.length()});
+                break;
+            }
+            continue;
+        }
+        
+        // 数字（支持十六进制、科学计数法）
+        if (std::isdigit(line[i]) || (line[i] == '.' && i + 1 < line.length() && std::isdigit(line[i + 1]))) {
+            size_t start = i;
+            i = parseNumber(line, start);
+            tokens.push_back({line.substr(start, i - start), TokenType::NUMBER, start, i});
+            continue;
+        }
+        
+        // 多字符操作符
+        if (i + 1 < line.length()) {
+            std::string two_char = line.substr(i, 2);
+            if (two_char == "==" || two_char == "~=" || two_char == "<=" || two_char == ">=" ||
+                two_char == ".." || two_char == "//" || two_char == "::") {
+                tokens.push_back({two_char, TokenType::OPERATOR, i, i + 2});
+                i += 2;
+                continue;
+            }
+        }
+        
+        // 标识符/关键字（支持ASCII字符，正确处理UTF-8多字节字符如中文）
+        unsigned char c = static_cast<unsigned char>(line[i]);
+        if (isAsciiAlpha(c) || line[i] == '_') {
+            size_t start = i;
+            // 只匹配ASCII字母数字和下划线，跳过UTF-8多字节字符（如中文）
+            while (i < line.length()) {
+                unsigned char ch = static_cast<unsigned char>(line[i]);
+                if (isAsciiAlnum(ch) || ch == '_') {
+                    i++;
+                } else if ((ch & 0x80) != 0) {
+                    // UTF-8多字节字符（如中文），作为普通文本处理，停止标识符匹配
+                    break;
+                } else {
+                    // 其他ASCII字符，停止
+                    break;
+                }
+            }
+            std::string word = line.substr(start, i - start);
+            
+            TokenType type = TokenType::NORMAL;
+            if (isKeyword(word)) {
+                type = TokenType::KEYWORD;
+            } else if (isType(word)) {
+                type = TokenType::TYPE;
+            } else if (i < line.length() && line[i] == '(') {
+                type = TokenType::FUNCTION;
+            }
+            
+            tokens.push_back({word, type, start, i});
+            continue;
+        }
+        
+        // 单字符操作符
+        if (isOperator(line[i])) {
+            tokens.push_back({std::string(1, line[i]), TokenType::OPERATOR, i, i + 1});
+            i++;
+            continue;
+        }
+        
+        // 其他
+        tokens.push_back({std::string(1, line[i]), TokenType::NORMAL, i, i + 1});
+        i++;
+    }
+    
+    return tokens;
+}
+
 ftxui::Color SyntaxHighlighter::getColorForToken(TokenType type) const {
     auto& colors = theme_.getColors();
     
@@ -1294,6 +1456,7 @@ void SyntaxHighlighter::setBackend(SyntaxHighlightBackend backend) {
     
     backend_ = backend;
     
+#ifdef BUILD_TREE_SITTER_SUPPORT
     if (backend_ == SyntaxHighlightBackend::TREE_SITTER && isTreeSitterAvailable()) {
         try {
             tree_sitter_highlighter_ = std::make_unique<SyntaxHighlighterTreeSitter>(theme_);
@@ -1309,6 +1472,13 @@ void SyntaxHighlighter::setBackend(SyntaxHighlightBackend backend) {
         tree_sitter_highlighter_.reset();
         backend_ = SyntaxHighlightBackend::NATIVE;
     }
+#else
+    // Tree-sitter 未编译，强制使用原生实现
+    if (backend_ == SyntaxHighlightBackend::TREE_SITTER) {
+        backend_ = SyntaxHighlightBackend::NATIVE;
+    }
+    tree_sitter_highlighter_.reset();
+#endif
 }
 
 bool SyntaxHighlighter::isTreeSitterAvailable() {

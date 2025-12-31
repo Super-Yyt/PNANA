@@ -107,6 +107,7 @@ private:
     std::vector<Token> tokenizeJSON(const std::string& line);
     std::vector<Token> tokenizeMarkdown(const std::string& line);
     std::vector<Token> tokenizeShell(const std::string& line);
+    std::vector<Token> tokenizeLua(const std::string& line);
     
     // 辅助方法（原有实现）
     bool isKeyword(const std::string& word) const;
