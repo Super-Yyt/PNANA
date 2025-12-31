@@ -9,9 +9,8 @@ set -e  # 遇到错误立即退出
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+BLUE='\033[0;34m'NC='\033[0m' # No Color
 NC='\033[0m' # No Color
-
 # 项目根目录
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${PROJECT_ROOT}/build"
@@ -206,4 +205,3 @@ main() {
 
 # 运行主函数
 main "$@"
-
