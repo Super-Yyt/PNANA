@@ -199,6 +199,81 @@ git clone --recursive https://github.com/your-repo/pnana.git
 git submodule update --init --recursive
 ```
 
+### Tree-sitter 语法高亮
+
+#### Tree-sitter
+
+**版本要求**: 0.20.0 或更高版本
+
+**说明**: Tree-sitter 是一个增量解析系统，用于提供高质量的语法高亮。如果未安装 Tree-sitter，pnana 将使用内置的原生语法高亮器，功能仍可正常使用，但语法高亮质量可能略低。
+
+**安装方法**:
+
+##### Ubuntu/Debian
+```bash
+# 安装 Tree-sitter 核心库
+sudo apt install libtree-sitter-dev
+
+# 安装语言库（可选，但推荐）
+sudo apt install libtree-sitter-cpp-dev \
+                 libtree-sitter-python-dev \
+                 libtree-sitter-javascript-dev \
+                 libtree-sitter-json-dev \
+                 libtree-sitter-markdown-dev \
+                 libtree-sitter-bash-dev
+```
+
+##### 从源码安装（推荐）
+
+如果包管理器中没有 Tree-sitter，可以从源码安装：
+
+```bash
+# 1. 安装 Tree-sitter 核心库
+git clone https://github.com/tree-sitter/tree-sitter.git
+cd tree-sitter
+make
+sudo make install
+
+# 2. 安装语言库（以 C++ 为例）
+git clone https://github.com/tree-sitter/tree-sitter-cpp.git
+cd tree-sitter-cpp
+make
+sudo make install
+
+# 其他常用语言库：
+# - tree-sitter-python: https://github.com/tree-sitter/tree-sitter-python
+# - tree-sitter-javascript: https://github.com/tree-sitter/tree-sitter-javascript
+# - tree-sitter-typescript: https://github.com/tree-sitter/tree-sitter-typescript
+# - tree-sitter-json: https://github.com/tree-sitter/tree-sitter-json
+# - tree-sitter-markdown: https://github.com/tree-sitter/tree-sitter-markdown
+# - tree-sitter-bash: https://github.com/tree-sitter/tree-sitter-bash
+```
+
+**验证安装**:
+```bash
+pkg-config --modversion tree-sitter
+```
+
+**注意**: 安装 Tree-sitter 后，需要重新配置 CMake：
+```bash
+rm -rf build
+mkdir build && cd build
+cmake ..
+```
+
+**支持的语言**: Tree-sitter 支持 40+ 种编程语言。pnana 默认支持以下语言：
+- C/C++ (cpp, c, h, hpp)
+- Python (py, pyw, pyi)
+- JavaScript/TypeScript (js, jsx, ts, tsx)
+- JSON (json, jsonc)
+- Markdown (md, markdown)
+- Shell/Bash (sh, bash, zsh)
+- Rust (rs)
+- Go (go)
+- Java (java)
+
+如果安装了对应的语言库，pnana 会自动使用 Tree-sitter 进行语法高亮。否则会回退到内置的原生语法高亮器。
+
 ### Lua 插件系统
 
 #### Lua
@@ -373,7 +448,18 @@ brew install nlohmann-json
 git submodule update --init --recursive
 ```
 
-#### 4. （可选）安装 Lua 插件系统
+#### 4. （可选）安装 Tree-sitter 语法高亮
+
+```bash
+# Ubuntu/Debian
+sudo apt install libtree-sitter-dev
+
+# 或从源码安装（推荐）
+git clone https://github.com/tree-sitter/tree-sitter.git
+cd tree-sitter && make && sudo make install
+```
+
+#### 5. （可选）安装 Lua 插件系统
 
 ```bash
 # Ubuntu/Debian
@@ -386,7 +472,7 @@ sudo dnf install lua-devel
 brew install lua
 ```
 
-#### 5. （可选）安装 Go
+#### 6. （可选）安装 Go
 
 ```bash
 # Ubuntu/Debian
@@ -399,7 +485,7 @@ sudo dnf install golang
 brew install go
 ```
 
-#### 6. 编译项目
+#### 7. 编译项目
 
 ```bash
 ./build.sh
@@ -416,6 +502,7 @@ brew install go
 | GCC | 7.0 | 11.0+ | 必需 |
 | Clang | 5.0 | 14.0+ | 必需 |
 | FTXUI | 最新 | 最新 | 必需 |
+| Tree-sitter | 0.20.0 | 0.20.0+ | 可选（语法高亮） |
 | nlohmann/json | 3.10.0 | 3.11.0+ | 可选（LSP） |
 | jsonrpccxx | 最新 | 最新 | 可选（LSP） |
 | Lua | 5.3 | 5.4 | 可选（插件） |
@@ -436,6 +523,10 @@ cmake .. -DCMAKE_PREFIX_PATH=/usr/local
 ### Q: 可以不安装 LSP 支持依赖吗？
 
 **A**: 可以。pnana 可以在没有 nlohmann/json 和 jsonrpccxx 的情况下编译和运行。但 LSP 功能（代码补全、诊断等）将被禁用。编辑器核心功能（编辑、搜索、文件浏览等）仍可正常使用。
+
+### Q: 可以不安装 Tree-sitter 吗？
+
+**A**: 可以。pnana 可以在没有 Tree-sitter 的情况下编译和运行。编辑器会自动使用内置的原生语法高亮器，功能仍可正常使用，但语法高亮质量可能略低于 Tree-sitter。
 
 ### Q: 可以不安装 Lua 吗？
 
@@ -474,6 +565,7 @@ cmake ..
 ```
 
 查找以下输出：
+- `✓ Tree-sitter found - syntax highlighting enabled` - Tree-sitter 语法高亮已启用
 - `LSP support enabled` - LSP 功能已启用
 - `✓ Lua found - plugin system enabled` - 插件系统已启用
 - `Go SSH module will be built and linked` - Go SSH 模块已启用
@@ -558,6 +650,14 @@ pnana
 ├── 必需库
 │   └── FTXUI
 └── 可选依赖
+    ├── 语法高亮
+    │   ├── Tree-sitter (>= 0.20.0) [推荐]
+    │   │   ├── tree-sitter-cpp
+    │   │   ├── tree-sitter-python
+    │   │   ├── tree-sitter-javascript
+    │   │   ├── tree-sitter-json
+    │   │   └── ... (其他语言库)
+    │   └── 原生语法高亮器 [内置，兼容模式]
     ├── LSP 支持
     │   ├── nlohmann/json (>= 3.10.0)
     │   └── jsonrpccxx (子模块)
@@ -578,6 +678,11 @@ pnana
 ---
 
 ## 更新日志
+
+- **v1.1.0**: 更新依赖文档
+  - 添加 Tree-sitter 语法高亮依赖
+  - 说明 Tree-sitter 和原生语法高亮器的兼容模式
+  - 更新安装指南和依赖关系图
 
 - **v1.0.0**: 更新依赖文档
   - 添加 LSP 支持依赖（nlohmann/json 和 jsonrpccxx）
