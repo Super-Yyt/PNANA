@@ -18,20 +18,28 @@ Element renderTerminal(features::Terminal& terminal, int height) {
     auto& theme = terminal.getTheme();
     auto& colors = theme.getColors();
     
-    // 输出区域 - 包含历史输出和当前输入行
+    // 输出区域和输入行
     Elements output_lines;
     const auto& output_lines_data = terminal.getOutputLines();
     
-    // 计算需要显示的行数（包括输入行）
-    size_t total_lines_needed = output_lines_data.size() + 1;  // +1 为输入行
-    size_t start_line = 0;
-    if (total_lines_needed > static_cast<size_t>(height)) {
-        // 确保输入行始终可见，所以从倒数 height-1 行开始显示
-        start_line = total_lines_needed - height;
+    // 计算可用高度：总高度 - 1（为输入行预留）
+    int available_height = height - 1;
+    if (available_height < 1) {
+        available_height = 1;  // 至少保留1行用于输出
     }
     
-    // 显示历史输出
-    for (size_t i = start_line; i < output_lines_data.size(); ++i) {
+    // 计算要显示的历史输出行数
+    size_t output_count = output_lines_data.size();
+    size_t start_line = 0;
+    
+    // 如果输出行数超过可用高度，只显示最近的输出
+    if (output_count > static_cast<size_t>(available_height)) {
+        start_line = output_count - available_height;
+    }
+    
+    // 显示历史输出（确保不超过可用高度）
+    for (size_t i = start_line; i < output_lines_data.size() && 
+         (i - start_line) < static_cast<size_t>(available_height); ++i) {
         const auto& line = output_lines_data[i];
         Color line_color;
         if (line.is_command) {
@@ -46,7 +54,7 @@ Element renderTerminal(features::Terminal& terminal, int height) {
         );
     }
     
-    // 输入行 - 作为输出区域的最后一行
+    // 输入行 - 始终固定在最后一行（确保始终可见）
     std::string current_input = terminal.getCurrentInput();
     size_t cursor_position = terminal.getCursorPosition();
     
@@ -150,11 +158,15 @@ Element renderTerminal(features::Terminal& terminal, int height) {
         );
     }
     
-    // 将输入行添加到输出行列表的最后（始终显示）
-    output_lines.push_back(hbox(input_elements));
+    // 构建最终布局：输出区域 + 输入行（固定底部）
+    Element output_area = vbox(output_lines);
+    Element input_line = hbox(input_elements);
     
-    // 简约风格：无边框，使用深色背景
-    return vbox(output_lines) | 
+    // 使用 flex 确保输出区域可以滚动，输入行固定在底部
+    return vbox({
+        output_area | flex,  // 输出区域可滚动
+        input_line            // 输入行固定在底部
+    }) | 
            size(HEIGHT, EQUAL, height) | 
            bgcolor(Color::RGB(20, 20, 25));  // 深色终端背景
 }
