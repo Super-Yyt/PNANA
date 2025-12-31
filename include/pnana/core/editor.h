@@ -25,7 +25,7 @@
 #include "ui/save_as_dialog.h"
 #include "features/search.h"
 #include "features/file_browser.h"
-#include "features/syntax_highlighter.h"
+#include "features/SyntaxHighlighter/syntax_highlighter.h"
 #include "features/command_palette.h"
 #include "features/terminal.h"
 #include "features/split_view.h"
