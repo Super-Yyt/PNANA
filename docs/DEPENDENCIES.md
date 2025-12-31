@@ -136,8 +136,6 @@ pkg-config --modversion ftxui
 
 ---
 
-## 可选依赖
-
 ### LSP 支持依赖
 
 #### nlohmann/json
@@ -198,6 +196,8 @@ git clone --recursive https://github.com/your-repo/pnana.git
 ```bash
 git submodule update --init --recursive
 ```
+
+## 可选依赖
 
 ### Tree-sitter 语法高亮
 
@@ -273,6 +273,77 @@ cmake ..
 - Java (java)
 
 如果安装了对应的语言库，pnana 会自动使用 Tree-sitter 进行语法高亮。否则会回退到内置的原生语法高亮器。
+
+### 图片预览功能
+
+#### FFmpeg
+
+**版本要求**: FFmpeg 4.0 或更高版本
+
+**说明**: FFmpeg 用于图片预览功能，支持在终端中显示图片文件的 ASCII 艺术预览。如果未安装 FFmpeg，图片预览功能将被禁用，但编辑器其他功能仍可正常使用。
+
+**依赖的 FFmpeg 库**:
+- `libavformat` - 多媒体格式支持
+- `libavcodec` - 编解码器支持
+- `libswscale` - 图像缩放和格式转换
+- `libavutil` - 工具函数库
+
+**安装方法**:
+
+##### Ubuntu/Debian
+```bash
+sudo apt install libavformat-dev libavcodec-dev libswscale-dev libavutil-dev
+```
+
+##### Fedora/RHEL
+```bash
+sudo dnf install ffmpeg-devel
+# 或分别安装
+sudo dnf install libavformat-devel libavcodec-devel libswscale-devel libavutil-devel
+```
+
+##### macOS
+```bash
+brew install ffmpeg
+```
+
+##### 从源码安装
+
+如果包管理器中没有 FFmpeg，可以从源码安装：
+
+```bash
+# 下载 FFmpeg
+git clone https://git.ffmpeg.org/ffmpeg.git
+cd ffmpeg
+./configure --enable-shared --disable-static
+make -j$(nproc)
+sudo make install
+```
+
+**验证安装**:
+```bash
+pkg-config --modversion libavformat
+pkg-config --modversion libavcodec
+pkg-config --modversion libswscale
+pkg-config --modversion libavutil
+```
+
+**注意**: 安装 FFmpeg 后，需要重新配置 CMake：
+
+```bash
+rm -rf build
+mkdir build && cd build
+cmake ..
+```
+
+**支持的图片格式**: FFmpeg 支持多种图片格式，包括但不限于：
+- JPEG/JPG
+- PNG
+- GIF
+- BMP
+- WebP
+- TIFF
+- 以及其他 FFmpeg 支持的格式
 
 ### Lua 插件系统
 
@@ -459,7 +530,20 @@ git clone https://github.com/tree-sitter/tree-sitter.git
 cd tree-sitter && make && sudo make install
 ```
 
-#### 5. （可选）安装 Lua 插件系统
+#### 5. （可选）安装 FFmpeg 图片预览支持
+
+```bash
+# Ubuntu/Debian
+sudo apt install libavformat-dev libavcodec-dev libswscale-dev libavutil-dev
+
+# Fedora/RHEL
+sudo dnf install ffmpeg-devel
+
+# macOS
+brew install ffmpeg
+```
+
+#### 6. （可选）安装 Lua 插件系统
 
 ```bash
 # Ubuntu/Debian
@@ -472,7 +556,7 @@ sudo dnf install lua-devel
 brew install lua
 ```
 
-#### 6. （可选）安装 Go
+#### 7. （可选）安装 Go
 
 ```bash
 # Ubuntu/Debian
@@ -485,7 +569,7 @@ sudo dnf install golang
 brew install go
 ```
 
-#### 7. 编译项目
+#### 8. 编译项目
 
 ```bash
 ./build.sh
@@ -503,6 +587,7 @@ brew install go
 | Clang | 5.0 | 14.0+ | 必需 |
 | FTXUI | 最新 | 最新 | 必需 |
 | Tree-sitter | 0.20.0 | 0.20.0+ | 可选（语法高亮） |
+| FFmpeg | 4.0 | 4.0+ | 可选（图片预览） |
 | nlohmann/json | 3.10.0 | 3.11.0+ | 可选（LSP） |
 | jsonrpccxx | 最新 | 最新 | 可选（LSP） |
 | Lua | 5.3 | 5.4 | 可选（插件） |
@@ -531,6 +616,12 @@ cmake .. -DCMAKE_PREFIX_PATH=/usr/local
 ### Q: 可以不安装 Lua 吗？
 
 **A**: 可以。pnana 可以在没有 Lua 的情况下编译和运行。但插件系统将被禁用，无法使用 Lua 插件扩展功能。编辑器核心功能仍可正常使用。
+
+### Q: 可以不安装 FFmpeg 吗？
+
+**A**: 可以。pnana 可以在没有 FFmpeg 的情况下编译和运行。图片预览功能将被完全禁用，即使选中图片文件也不会显示预览。编辑器其他功能（文本编辑、文件浏览、语法高亮等）仍可正常使用。
+
+**注意**：如果没有安装 FFmpeg，CMake 配置时会显示警告信息，但编译和运行不会失败。安装 FFmpeg 后需要重新运行 CMake 配置才能启用图片预览功能。
 
 ### Q: 可以不安装 Go 吗？
 
@@ -566,6 +657,7 @@ cmake ..
 
 查找以下输出：
 - `✓ Tree-sitter found - syntax highlighting enabled` - Tree-sitter 语法高亮已启用
+- `Found libavformat, version ...` - FFmpeg 图片预览已启用
 - `LSP support enabled` - LSP 功能已启用
 - `✓ Lua found - plugin system enabled` - 插件系统已启用
 - `Go SSH module will be built and linked` - Go SSH 模块已启用
@@ -649,7 +741,7 @@ pnana
 │   └── C++ 编译器 (C++17)
 ├── 必需库
 │   └── FTXUI
-└── 可选依赖
+    └── 可选依赖
     ├── 语法高亮
     │   ├── Tree-sitter (>= 0.20.0) [推荐]
     │   │   ├── tree-sitter-cpp
@@ -658,6 +750,12 @@ pnana
     │   │   ├── tree-sitter-json
     │   │   └── ... (其他语言库)
     │   └── 原生语法高亮器 [内置，兼容模式]
+    ├── 图片预览
+    │   └── FFmpeg (>= 4.0)
+    │       ├── libavformat
+    │       ├── libavcodec
+    │       ├── libswscale
+    │       └── libavutil
     ├── LSP 支持
     │   ├── nlohmann/json (>= 3.10.0)
     │   └── jsonrpccxx (子模块)
@@ -678,6 +776,11 @@ pnana
 ---
 
 ## 更新日志
+
+- **v1.2.0**: 更新依赖文档
+  - 添加 FFmpeg 图片预览依赖
+  - 说明 FFmpeg 库的安装方法和支持的图片格式
+  - 更新安装指南、常见问题和依赖关系图
 
 - **v1.1.0**: 更新依赖文档
   - 添加 Tree-sitter 语法高亮依赖
