@@ -1,0 +1,97 @@
+#!/bin/bash
+# 安装后脚本：将插件复制到用户主目录
+
+# 检测实际用户（如果通过 sudo 运行，使用 SUDO_USER）
+ACTUAL_USER="${SUDO_USER:-$USER}"
+if [ "$ACTUAL_USER" = "root" ] && [ -n "$SUDO_USER" ]; then
+    ACTUAL_USER="$SUDO_USER"
+fi
+
+# 获取实际用户的主目录
+if [ "$ACTUAL_USER" = "root" ]; then
+    # 如果是 root，尝试从环境变量获取
+    if [ -n "$SUDO_USER" ]; then
+        ACTUAL_USER="$SUDO_USER"
+        HOME=$(eval echo ~$ACTUAL_USER)
+    else
+        # 如果没有 SUDO_USER，使用当前登录用户
+        ACTUAL_USER=$(logname 2>/dev/null || echo "$USER")
+        HOME=$(eval echo ~$ACTUAL_USER)
+    fi
+else
+    HOME=$(eval echo ~$ACTUAL_USER)
+fi
+
+# 如果仍然无法确定，尝试从 /etc/passwd 获取
+if [ ! -d "$HOME" ] || [ "$HOME" = "/root" ]; then
+    # 尝试获取第一个非 root 用户的主目录
+    for user in $(getent passwd | awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' | head -1); do
+        if [ -n "$user" ]; then
+            ACTUAL_USER="$user"
+            HOME=$(eval echo ~$ACTUAL_USER)
+            if [ -d "$HOME" ]; then
+                break
+            fi
+        fi
+    done
+fi
+
+# 插件目标目录
+PLUGIN_DIR="$HOME/.config/pnana/plugins"
+
+echo "Detected user: $ACTUAL_USER"
+echo "Home directory: $HOME"
+
+# 系统插件目录（安装源）
+# 如果 CMAKE_INSTALL_PREFIX 为空或为默认值，使用 /usr/local
+if [ -z "@CMAKE_INSTALL_PREFIX@" ] || [ "@CMAKE_INSTALL_PREFIX@" = "/usr/local" ]; then
+    SYSTEM_PLUGIN_DIR="/usr/local/share/pnana/plugins"
+else
+    SYSTEM_PLUGIN_DIR="@CMAKE_INSTALL_PREFIX@/share/pnana/plugins"
+fi
+
+echo "Installing plugins to user directory..."
+echo "  Source: $SYSTEM_PLUGIN_DIR"
+echo "  Target: $PLUGIN_DIR"
+
+# 创建目标目录（使用实际用户的权限）
+if [ -n "$SUDO_USER" ] && [ "$USER" = "root" ]; then
+    # 如果通过 sudo 运行，使用实际用户创建目录
+    sudo -u "$ACTUAL_USER" mkdir -p "$PLUGIN_DIR" 2>/dev/null || mkdir -p "$PLUGIN_DIR"
+    # 设置正确的所有者
+    if [ -d "$PLUGIN_DIR" ]; then
+        chown -R "$ACTUAL_USER:$ACTUAL_USER" "$PLUGIN_DIR" 2>/dev/null || true
+    fi
+else
+    mkdir -p "$PLUGIN_DIR"
+fi
+
+# 如果系统插件目录存在，复制插件
+if [ -d "$SYSTEM_PLUGIN_DIR" ]; then
+    # 复制所有插件（如果不存在则复制）
+    for plugin in "$SYSTEM_PLUGIN_DIR"/*; do
+        if [ -d "$plugin" ]; then
+            plugin_name=$(basename "$plugin")
+            target_plugin="$PLUGIN_DIR/$plugin_name"
+            
+            # 如果插件已存在，跳过（保留用户自定义）
+            if [ ! -d "$target_plugin" ]; then
+                echo "  Installing plugin: $plugin_name"
+                if [ -n "$SUDO_USER" ] && [ "$USER" = "root" ]; then
+                    # 如果通过 sudo 运行，使用实际用户复制
+                    sudo -u "$ACTUAL_USER" cp -r "$plugin" "$target_plugin" 2>/dev/null || cp -r "$plugin" "$target_plugin"
+                    chown -R "$ACTUAL_USER:$ACTUAL_USER" "$target_plugin" 2>/dev/null || true
+                else
+                    cp -r "$plugin" "$target_plugin"
+                fi
+            else
+                echo "  Plugin $plugin_name already exists, skipping"
+            fi
+        fi
+    done
+    echo "Plugins installed successfully to $PLUGIN_DIR"
+else
+    echo "Warning: System plugin directory not found: $SYSTEM_PLUGIN_DIR"
+    echo "  Plugins will not be installed."
+    echo "  You can manually copy plugins from the source directory."
+fi
