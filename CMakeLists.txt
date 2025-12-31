@@ -195,6 +195,7 @@ set(SOURCES
     src/ui/create_folder_dialog.cpp
     src/ui/cursor_config_dialog.cpp
     src/ui/save_as_dialog.cpp
+    src/ui/binary_file_view.cpp
     src/ui/help.cpp
     src/ui/dialog.cpp
     src/ui/file_picker.cpp
@@ -298,6 +299,7 @@ set(HEADERS
     include/pnana/ui/create_folder_dialog.h
     include/pnana/ui/save_as_dialog.h
     include/pnana/ui/cursor_config_dialog.h
+    include/pnana/ui/binary_file_view.h
     include/pnana/ui/dialog.h
     include/pnana/ui/file_picker.h
     include/pnana/ui/file_browser_view.h
