@@ -19,7 +19,7 @@
 
 <div align="center">
 
-<img src="resources/demo.png" alt="pnana demo" width="800">
+<img src="resources/demo.gif" alt="pnana demo" width="800">
 
 </div>
 

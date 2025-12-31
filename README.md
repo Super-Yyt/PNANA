@@ -19,7 +19,7 @@
 
 <div align="center">
 
-<img src="resources/demo.png" alt="pnana demo" width="800">
+<img src="resources/demo.gif" alt="pnana demo" width="800">
 
 </div>
 
@@ -71,7 +71,7 @@
 
 #### Lua 插件系统
 - **强大的扩展能力**：使用 Lua 编写插件，轻松扩展编辑器功能
-- **丰富的 API**：提供完整的编辑器 API，支持文件操作、光标控制、事件监听等
+ls l- **丰富的 API**：提供完整的编辑器 API，支持文件操作、光标控制、事件监听等
 - **简单易用**：参考 Neovim 的设计，插件开发简单直观
 - **自动加载**：插件自动发现和加载，无需手动配置
 
