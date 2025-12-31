@@ -163,6 +163,15 @@ set(SOURCES
     src/features/ssh/ssh_client.cpp
     src/core/editor_ssh.cpp
     src/core/editor_lsp.cpp
+    # 新的输入处理模块（解耦优化）
+    src/core/input/base_region_handler.cpp
+    src/core/input/input_router.cpp
+    src/core/input/region_handlers/terminal_handler.cpp
+    src/core/input/region_handlers/file_browser_handler.cpp
+    # 新的UI渲染模块（解耦优化）
+    src/core/ui/base_region_renderer.cpp
+    src/core/ui/border_manager.cpp
+    src/core/ui/ui_router.cpp
     # 插件系统
     src/plugins/lua_engine.cpp
     src/plugins/plugin_manager.cpp
@@ -197,6 +206,16 @@ set(HEADERS
     include/pnana/input/key_action.h
     include/pnana/input/key_binding_manager.h
     include/pnana/input/action_executor.h
+    # 新的输入处理模块（解耦优化）
+    include/pnana/core/input/base_region_handler.h
+    include/pnana/core/input/base_mode_handler.h
+    include/pnana/core/input/input_router.h
+    include/pnana/core/input/region_handlers/terminal_handler.h
+    include/pnana/core/input/region_handlers/file_browser_handler.h
+    # 新的UI渲染模块（解耦优化）
+    include/pnana/core/ui/base_region_renderer.h
+    include/pnana/core/ui/border_manager.h
+    include/pnana/core/ui/ui_router.h
     # UI模块头文件
     include/pnana/ui/theme.h
     include/pnana/ui/statusbar.h
