@@ -6,66 +6,108 @@ using namespace ftxui;
 namespace pnana {
 namespace ui {
 
-Help::Help(Theme& theme) : theme_(theme) {
+Help::Help(Theme& theme) : theme_(theme), scroll_offset_(0) {
 }
 
 std::vector<HelpEntry> Help::getAllHelp() {
     return {
         // 文件操作
         {"File Operations", "Ctrl+N", "New file"},
-        {"File Operations", "Ctrl+O", "Open file browser"},
+        {"File Operations", "Ctrl+O", "Toggle file browser"},
         {"File Operations", "Ctrl+S", "Save file"},
+        {"File Operations", "Alt+A", "Save as"},
         {"File Operations", "Ctrl+W", "Close current tab"},
         {"File Operations", "Ctrl+Q", "Quit editor"},
+        {"File Operations", "Alt+F", "Create folder"},
+        {"File Operations", "Alt+M", "File picker"},
         
         // 编辑操作
         {"Editing", "Ctrl+Z", "Undo"},
-        {"Editing", "Ctrl+Y", "Redo"},
+        {"Editing", "Ctrl+Y", "Redo (or Ctrl+Shift+Z)"},
         {"Editing", "Ctrl+X", "Cut"},
         {"Editing", "Ctrl+C", "Copy"},
         {"Editing", "Ctrl+V", "Paste"},
         {"Editing", "Ctrl+A", "Select all"},
         {"Editing", "Ctrl+D", "Duplicate line"},
-        {"Editing", "Tab", "Insert 4 spaces"},
-        {"Editing", "Backspace", "Delete previous character"},
-        {"Editing", "Delete", "Delete current character"},
+        {"Editing", "Ctrl+Shift+K", "Delete line"},
+        {"Editing", "Ctrl+Backspace", "Delete word"},
+        {"Editing", "Alt+↑/↓", "Move line up/down"},
+        {"Editing", "Tab", "Indent line"},
+        {"Editing", "Shift+Tab", "Unindent line"},
+        {"Editing", "Ctrl+/", "Toggle comment"},
+#ifdef BUILD_LSP_SUPPORT
+        {"Editing", "Ctrl+Space", "Trigger completion"},
+#endif
         
         // 导航
         {"Navigation", "↑↓←→", "Move cursor"},
         {"Navigation", "Home", "Go to line start"},
         {"Navigation", "End", "Go to line end"},
-        {"Navigation", "Page Up/Down", "Scroll page"},
         {"Navigation", "Ctrl+Home", "Go to file start"},
         {"Navigation", "Ctrl+End", "Go to file end"},
         {"Navigation", "Ctrl+G", "Go to line number"},
+        {"Navigation", "Page Up/Down", "Scroll page"},
         
         // 搜索
         {"Search", "Ctrl+F", "Search text"},
-        {"Search", "F3", "Find next"},
-        {"Search", "Shift+F3", "Find previous"},
         {"Search", "Ctrl+H", "Replace text"},
+        {"Search", "Ctrl+F3", "Find next"},
+        {"Search", "Ctrl+Shift+F3", "Find previous"},
         
         // 选择
         {"Selection", "Shift+↑↓←→", "Select text"},
         {"Selection", "Ctrl+A", "Select all"},
         
         // 标签页
-        {"Tabs", "Tab", "Next tab (in search mode)"},
-        {"Tabs", "Shift+Tab", "Previous tab"},
+        {"Tabs", "Alt+Tab", "Next tab (or Ctrl+PageDown)"},
+        {"Tabs", "Alt+Shift+Tab", "Previous tab (or Ctrl+PageUp)"},
         {"Tabs", "Ctrl+W", "Close tab"},
         
         // 视图
         {"View", "Ctrl+T", "Toggle theme menu"},
         {"View", "F1", "Show this help"},
+        {"View", "Ctrl+Shift+L", "Toggle line numbers"},
+        {"View", "F3", "Command palette"},
+        {"View", "F4", "SSH connect"},
+#ifdef BUILD_LUA_SUPPORT
+        {"View", "Alt+P", "Plugin manager"},
+#endif
+        
+        // 分屏
+        {"Split View", "Ctrl+L", "Split view dialog"},
+        {"Split View", "Ctrl+←→↑↓", "Navigate between regions"},
         
         // 文件浏览器
         {"File Browser", "Ctrl+O", "Toggle file browser"},
-        {"File Browser", "↑↓", "Navigate (in browser)"},
+        {"File Browser", "↑↓", "Navigate files"},
         {"File Browser", "Enter", "Open file/folder"},
         {"File Browser", "Backspace", "Go to parent folder"},
         {"File Browser", "h", "Toggle hidden files"},
         {"File Browser", "r", "Refresh file list"},
         {"File Browser", "Esc", "Close browser"},
+        
+        // 命令面板
+        {"Command Palette", "F3", "Open command palette"},
+        {"Command Palette", "Type 'cursor'", "Open cursor config"},
+        {"Command Palette", "↑↓", "Navigate commands"},
+        {"Command Palette", "Enter", "Execute command"},
+        {"Command Palette", "Esc", "Close palette"},
+        
+        // 图片预览
+        {"Image Preview", "Select image", "Auto preview in code area"},
+        {"Image Preview", "Supported", "JPG, PNG, GIF, BMP, WEBP"},
+        
+        // 终端
+        {"Terminal", "Ctrl+`", "Toggle terminal (if enabled)"},
+        {"Terminal", "+/-", "Adjust terminal height"},
+        {"Terminal", "←→", "Switch panels"},
+        
+        // 帮助
+        {"Help", "F1", "Show/hide help"},
+        {"Help", "↑↓/j/k", "Scroll help"},
+        {"Help", "Page Up/Down", "Page navigation"},
+        {"Help", "Home/End", "Jump to top/bottom"},
+        {"Help", "Esc", "Close help"},
     };
 }
 
@@ -106,7 +148,12 @@ Element Help::render(int width, int height) {
         "Selection",
         "Tabs",
         "View",
-        "File Browser"
+        "Split View",
+        "File Browser",
+        "Command Palette",
+        "Image Preview",
+        "Terminal",
+        "Help"
     };
     
     for (const auto& category : categories) {
@@ -123,7 +170,7 @@ Element Help::render(int width, int height) {
                 help_content.push_back(
                     hbox({
                         text("  "),
-                        text(entry.key) | color(colors.function) | bold | size(WIDTH, EQUAL, 18),
+                        text(entry.key) | color(colors.function) | bold | size(WIDTH, EQUAL, 22),
                         text(" "),
                         text(entry.description) | color(colors.foreground)
                     })
@@ -144,8 +191,38 @@ Element Help::render(int width, int height) {
         }) | color(colors.success)
     );
     
+    // 应用滚动偏移
+    size_t visible_height = static_cast<size_t>(height - 8); // 减去标题、分隔符、状态栏等
+    size_t total_items = help_content.size();
+    
+    if (scroll_offset_ > total_items) {
+        scroll_offset_ = 0;
+    }
+    
+    Elements visible_content;
+    size_t end_index = std::min(scroll_offset_ + visible_height, total_items);
+    for (size_t i = scroll_offset_; i < end_index; ++i) {
+        visible_content.push_back(help_content[i]);
+    }
+    
     content.push_back(
-        vbox(help_content) | vscroll_indicator | frame | flex
+        vbox(visible_content) | frame | flex
+    );
+    
+    // 底部提示（包含翻页信息）
+    std::string page_info = "Page " + std::to_string((scroll_offset_ / visible_height) + 1) + 
+                           " | Total: " + std::to_string(total_items) + " items";
+    content.push_back(separator());
+    content.push_back(
+        hbox({
+            text(" "),
+            text(icons::BULB),
+            text(" Tip: Most shortcuts work in any mode! | "),
+            text("↑↓") | color(colors.function) | bold,
+            text(": Scroll, "),
+            text("Page Up/Down") | color(colors.function) | bold,
+            text(": Page navigation")
+        }) | color(colors.success)
     );
     
     return vbox(content) 
@@ -176,6 +253,53 @@ Element Help::renderCategory(const std::string& category,
     }
     
     return vbox(items);
+}
+
+bool Help::handleInput(ftxui::Event event) {
+    if (event == Event::ArrowUp || event == Event::Character('k')) {
+        if (scroll_offset_ > 0) {
+            scroll_offset_--;
+        }
+        return true;
+    }
+    
+    if (event == Event::ArrowDown || event == Event::Character('j')) {
+        scroll_offset_++;
+        return true;
+    }
+    
+    if (event == Event::PageUp) {
+        size_t page_size = 10;
+        if (scroll_offset_ >= page_size) {
+            scroll_offset_ -= page_size;
+        } else {
+            scroll_offset_ = 0;
+        }
+        return true;
+    }
+    
+    if (event == Event::PageDown) {
+        size_t page_size = 10;
+        scroll_offset_ += page_size;
+        return true;
+    }
+    
+    if (event == Event::Home) {
+        scroll_offset_ = 0;
+        return true;
+    }
+    
+    if (event == Event::End) {
+        // 设置为最大值，会在渲染时自动调整
+        scroll_offset_ = 10000;
+        return true;
+    }
+    
+    return false;
+}
+
+void Help::reset() {
+    scroll_offset_ = 0;
 }
 
 } // namespace ui

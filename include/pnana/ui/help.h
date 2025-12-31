@@ -3,6 +3,7 @@
 
 #include "ui/theme.h"
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/component/event.hpp>
 #include <string>
 #include <vector>
 
@@ -24,11 +25,18 @@ public:
     // 渲染帮助窗口
     ftxui::Element render(int width, int height);
     
+    // 处理输入事件（翻页等）
+    bool handleInput(ftxui::Event event);
+    
     // 获取所有帮助条目
     static std::vector<HelpEntry> getAllHelp();
     
+    // 重置滚动位置
+    void reset();
+    
 private:
     Theme& theme_;
+    size_t scroll_offset_;  // 滚动偏移量
     
     // 渲染帮助分类
     ftxui::Element renderCategory(const std::string& category, 
