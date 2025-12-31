@@ -52,8 +52,17 @@ public:
     // 获取已加载的插件列表
     std::vector<PluginInfo> getLoadedPlugins() const;
     
+    // 获取所有插件列表（包括未加载的）
+    std::vector<PluginInfo> getAllPlugins() const;
+    
     // 获取插件信息
     PluginInfo getPluginInfo(const std::string& plugin_name) const;
+    
+    // 启用插件
+    bool enablePlugin(const std::string& plugin_name);
+    
+    // 禁用插件
+    bool disablePlugin(const std::string& plugin_name);
     
     // 触发事件
     void triggerEvent(const std::string& event, const std::vector<std::string>& args = {});

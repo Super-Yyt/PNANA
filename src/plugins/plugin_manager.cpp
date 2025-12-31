@@ -113,7 +113,7 @@ void PluginManager::loadPlugins(const std::string& plugin_dir) {
         return;
     }
     
-    // 遍历插件目录
+    // 遍历插件目录，扫描所有插件
     try {
         for (const auto& entry : fs::directory_iterator(plugin_dir)) {
             if (!entry.is_directory()) {
@@ -128,13 +128,33 @@ void PluginManager::loadPlugins(const std::string& plugin_dir) {
                 continue;
             }
             
-            // 尝试加载插件
-            if (!loadPlugin(plugin_path)) {
-                LOG_WARNING("Failed to load plugin: " + plugin_name);
+            // 注册插件（扫描配置但不加载）
+            PluginInfo info;
+            info.path = plugin_path;
+            info.name = plugin_name;
+            info.loaded = false;
+            
+            // 加载插件配置（只有在 Lua 引擎已初始化时才能读取配置）
+            if (lua_engine_ && lua_engine_->getState()) {
+                if (!loadPluginConfig(plugin_path, info)) {
+                    // 如果没有配置文件或读取失败，使用默认值
+                    info.version = "1.0.0";
+                    info.description = "No description";
+                    info.author = "Unknown";
+                }
+            } else {
+                // Lua 引擎未初始化，使用默认值
+                info.version = "1.0.0";
+                info.description = "No description";
+                info.author = "Unknown";
             }
+            
+            // 注册插件
+            plugins_[info.name] = info;
+            plugin_paths_[info.name] = plugin_path;
         }
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception while loading plugins: " + std::string(e.what()));
+        LOG_ERROR("Exception while scanning plugins: " + std::string(e.what()));
     }
 }
 
@@ -147,12 +167,27 @@ bool PluginManager::loadPlugin(const std::string& plugin_path) {
     info.path = plugin_path;
     info.name = fs::path(plugin_path).filename().string();
     
-    // 加载插件配置
-    if (!loadPluginConfig(plugin_path, info)) {
-        // 如果没有配置文件，使用默认值
-        info.version = "1.0.0";
-        info.description = "No description";
-        info.author = "Unknown";
+    // 如果插件已经注册，使用已有信息
+    auto it = plugins_.find(info.name);
+    if (it != plugins_.end()) {
+        info = it->second;
+    } else {
+        // 加载插件配置
+        if (!loadPluginConfig(plugin_path, info)) {
+            // 如果没有配置文件，使用默认值
+            info.version = "1.0.0";
+            info.description = "No description";
+            info.author = "Unknown";
+        }
+        
+        // 注册插件（但不加载）
+        plugins_[info.name] = info;
+        plugin_paths_[info.name] = plugin_path;
+    }
+    
+    // 如果已经加载，直接返回
+    if (info.loaded) {
+        return true;
     }
     
     // 执行插件初始化
@@ -160,14 +195,17 @@ bool PluginManager::loadPlugin(const std::string& plugin_path) {
         return false;
     }
     
-    info.loaded = true;
-    plugins_[info.name] = info;
-    plugin_paths_[info.name] = plugin_path;
+    // 更新加载状态
+    plugins_[info.name].loaded = true;
     
     return true;
 }
 
 bool PluginManager::loadPluginConfig(const std::string& plugin_path, PluginInfo& info) {
+    if (!lua_engine_ || !lua_engine_->getState()) {
+        return false;
+    }
+    
     // 查找 plugin.lua 或 init.lua
     std::vector<std::string> config_files = {
         plugin_path + "/plugin.lua",
@@ -176,23 +214,6 @@ bool PluginManager::loadPluginConfig(const std::string& plugin_path, PluginInfo&
     
     for (const auto& config_file : config_files) {
         if (fs::exists(config_file)) {
-            // 执行配置文件以获取插件信息
-            std::string config_code = R"(
-                local plugin = {}
-                plugin.name = ")" + info.name + R"("
-                plugin.version = "1.0.0"
-                plugin.description = ""
-                plugin.author = ""
-                
-                -- 插件可以设置这些值
-                -- plugin.name = "..."
-                -- plugin.version = "..."
-                -- plugin.description = "..."
-                -- plugin.author = "..."
-                
-                return plugin
-            )";
-            
             // 执行插件文件
             if (lua_engine_->executeFile(config_file)) {
                 // 尝试从全局变量获取插件信息
@@ -286,12 +307,40 @@ std::vector<PluginInfo> PluginManager::getLoadedPlugins() const {
     return result;
 }
 
+std::vector<PluginInfo> PluginManager::getAllPlugins() const {
+    std::vector<PluginInfo> result;
+    for (const auto& [name, info] : plugins_) {
+        result.push_back(info);
+    }
+    return result;
+}
+
 PluginInfo PluginManager::getPluginInfo(const std::string& plugin_name) const {
     auto it = plugins_.find(plugin_name);
     if (it != plugins_.end()) {
         return it->second;
     }
     return PluginInfo();
+}
+
+bool PluginManager::enablePlugin(const std::string& plugin_name) {
+    auto it = plugin_paths_.find(plugin_name);
+    if (it == plugin_paths_.end()) {
+        return false;
+    }
+    
+    // 如果已经加载，直接返回成功
+    auto plugin_it = plugins_.find(plugin_name);
+    if (plugin_it != plugins_.end() && plugin_it->second.loaded) {
+        return true;
+    }
+    
+    // 加载插件
+    return loadPlugin(it->second);
+}
+
+bool PluginManager::disablePlugin(const std::string& plugin_name) {
+    return unloadPlugin(plugin_name);
 }
 
 void PluginManager::triggerEvent(const std::string& event, const std::vector<std::string>& args) {
