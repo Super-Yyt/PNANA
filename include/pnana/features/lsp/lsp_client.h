@@ -2,6 +2,8 @@
 #define PNANA_FEATURES_LSP_CLIENT_H
 
 #include "features/lsp/lsp_stdio_connector.h"
+#include "features/lsp/lsp_types.h"
+#include "features/lsp/document_change_tracker.h"
 #include "jsonrpccxx/client.hpp"
 #include "jsonrpccxx/common.hpp"
 #include <nlohmann/json.hpp>
@@ -13,24 +15,6 @@
 
 namespace pnana {
 namespace features {
-
-// LSP 位置结构
-struct LspPosition {
-    int line;
-    int character;
-    
-    LspPosition(int l = 0, int c = 0) : line(l), character(c) {}
-};
-
-// LSP 范围结构
-struct LspRange {
-    LspPosition start;
-    LspPosition end;
-    
-    LspRange() = default;
-    LspRange(const LspPosition& s, const LspPosition& e) 
-        : start(s), end(e) {}
-};
 
 // 代码补全项
 struct CompletionItem {
@@ -79,6 +63,9 @@ public:
     void didOpen(const std::string& uri, const std::string& language_id, 
                  const std::string& content, int version = 1);
     void didChange(const std::string& uri, const std::string& content, int version = 1);
+    void didChangeIncremental(const std::string& uri, 
+                              const std::vector<TextDocumentContentChangeEvent>& changes,
+                              int version = 1);
     void didClose(const std::string& uri);
     void didSave(const std::string& uri);
     

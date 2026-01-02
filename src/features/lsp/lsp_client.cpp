@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 
 namespace pnana {
 namespace features {
@@ -191,6 +192,62 @@ void LspClient::didChange(const std::string& uri, const std::string& content, in
     }
 }
 
+void LspClient::didChangeIncremental(const std::string& uri, 
+                                     const std::vector<TextDocumentContentChangeEvent>& changes,
+                                     int version) {
+    if (!isConnected() || changes.empty()) {
+        return;
+    }
+    
+    try {
+        document_versions_[uri] = version;
+        
+        jsonrpccxx::json params;
+        params["textDocument"]["uri"] = uri;
+        params["textDocument"]["version"] = version;
+        
+        jsonrpccxx::json content_changes = jsonrpccxx::json::array();
+        
+        for (const auto& change : changes) {
+            jsonrpccxx::json change_obj;
+            
+            // 如果 range 为空或 text 为空，表示全量更新
+            if (change.text.empty() || (change.range.start.line == 0 && 
+                                        change.range.start.character == 0 &&
+                                        change.range.end.line == 0 &&
+                                        change.range.end.character == 0)) {
+                // 全量更新（这种情况应该使用 didChange）
+                continue;
+            }
+            
+            // 增量更新：包含 range 和 text
+            change_obj["range"]["start"]["line"] = change.range.start.line;
+            change_obj["range"]["start"]["character"] = change.range.start.character;
+            change_obj["range"]["end"]["line"] = change.range.end.line;
+            change_obj["range"]["end"]["character"] = change.range.end.character;
+            change_obj["rangeLength"] = change.rangeLength;
+            change_obj["text"] = change.text;
+            
+            content_changes.push_back(change_obj);
+        }
+        
+        // 如果没有有效的增量更新，回退到全量更新
+        if (content_changes.empty()) {
+            return;  // 或者调用 didChange
+        }
+        
+        params["contentChanges"] = content_changes;
+        
+        jsonrpccxx::named_parameter named_params;
+        for (auto& [key, value] : params.items()) {
+            named_params[key] = value;
+        }
+        rpc_client_->CallNotificationNamed("textDocument/didChange", named_params);
+    } catch (const std::exception& e) {
+        // 静默处理错误
+    }
+}
+
 void LspClient::didClose(const std::string& uri) {
     if (!isConnected()) return;
     
@@ -230,12 +287,18 @@ void LspClient::didSave(const std::string& uri) {
 std::vector<CompletionItem> LspClient::completion(
     const std::string& uri, const LspPosition& position) {
     
+    auto completion_start = std::chrono::steady_clock::now();
+    LOG("[COMPLETION] [LspClient] completion() called for URI: " + uri + 
+        " at line " + std::to_string(position.line) + ", char " + std::to_string(position.character));
+    
     std::vector<CompletionItem> items;
     if (!isConnected()) {
+        LOG("[COMPLETION] [LspClient] Not connected");
         return items;
     }
     
     try {
+        auto prepare_start = std::chrono::steady_clock::now();
         jsonrpccxx::json params;
         params["textDocument"]["uri"] = uri;
         params["position"] = positionToJson(position);
@@ -250,11 +313,24 @@ std::vector<CompletionItem> LspClient::completion(
         for (auto& [key, value] : params.items()) {
             named_params[key] = value;
         }
+        auto prepare_end = std::chrono::steady_clock::now();
+        auto prepare_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            prepare_end - prepare_start);
+        LOG("[COMPLETION] [LspClient] Prepared request params (took " + 
+            std::to_string(prepare_time.count() / 1000.0) + " ms)");
         
+        auto rpc_start = std::chrono::steady_clock::now();
+        LOG("[COMPLETION] [LspClient] Calling RPC method textDocument/completion...");
         jsonrpccxx::json result = rpc_client_->CallMethodNamed<jsonrpccxx::json>(
             request_id, "textDocument/completion", named_params
         );
+        auto rpc_end = std::chrono::steady_clock::now();
+        auto rpc_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            rpc_end - rpc_start);
+        LOG("[COMPLETION] [LspClient] RPC call completed (took " + 
+            std::to_string(rpc_time.count()) + " ms)");
         
+        auto parse_start = std::chrono::steady_clock::now();
         if (result.contains("items") && result["items"].is_array()) {
             for (const auto& item : result["items"]) {
                 items.push_back(jsonToCompletionItem(item));
@@ -264,12 +340,18 @@ std::vector<CompletionItem> LspClient::completion(
                 items.push_back(jsonToCompletionItem(item));
             }
         }
+        auto parse_end = std::chrono::steady_clock::now();
+        auto parse_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            parse_end - parse_start);
+        LOG("[COMPLETION] [LspClient] Parsed " + std::to_string(items.size()) + 
+            " items (took " + std::to_string(parse_time.count() / 1000.0) + " ms)");
         
         // 按相关性排序：优先显示更相关的项
         // 1. 函数/方法优先
         // 2. 变量/字段次之
         // 3. 其他类型
         // 4. 相同类型内按字母顺序
+        auto sort_start = std::chrono::steady_clock::now();
         std::sort(items.begin(), items.end(), 
                  [](const CompletionItem& a, const CompletionItem& b) {
                      // 获取类型优先级
@@ -291,10 +373,28 @@ std::vector<CompletionItem> LspClient::completion(
                      // 相同优先级，按字母顺序
                      return a.label < b.label;
                  });
+        auto sort_end = std::chrono::steady_clock::now();
+        auto sort_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            sort_end - sort_start);
+        LOG("[COMPLETION] [LspClient] Sorted " + std::to_string(items.size()) + 
+            " items (took " + std::to_string(sort_time.count() / 1000.0) + " ms)");
+        
+        auto completion_end = std::chrono::steady_clock::now();
+        auto completion_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            completion_end - completion_start);
+        LOG("[COMPLETION] [LspClient] completion() total time: " + 
+            std::to_string(completion_time.count()) + " ms");
+        
     } catch (const std::exception& e) {
-        // 静默处理错误
+        auto error_time = std::chrono::steady_clock::now();
+        auto completion_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            error_time - completion_start);
+        LOG_ERROR("[COMPLETION] [LspClient] completion() failed after " + 
+                 std::to_string(completion_time.count()) + " ms: " + e.what());
+        std::cerr << "completion failed: " << e.what() << std::endl;
     }
     
+    LOG("[COMPLETION] [LspClient] Returning " + std::to_string(items.size()) + " items");
     return items;
 }
 

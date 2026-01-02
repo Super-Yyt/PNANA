@@ -18,6 +18,7 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <chrono>
 
 #ifdef USE_BOOST_PROCESS
 #include <boost/process.hpp>
@@ -334,6 +335,8 @@ std::string LspStdioConnector::Send(const std::string& request) {
         // 如果解析失败，假设是请求（保守策略）
     }
     
+    // 使用 request_mutex_ 确保通知监听线程不会在 Send() 读取响应时干扰
+    // 注意：通知监听线程在读取消息时也应该获取这个锁
     std::lock_guard<std::mutex> lock(request_mutex_);
     
 #ifndef USE_BOOST_PROCESS
@@ -357,23 +360,78 @@ std::string LspStdioConnector::Send(const std::string& request) {
     }
     
     // 读取响应（仅对请求）
+    // 需要从请求中提取 ID，以便匹配响应
+    int request_id = -1;
     try {
-        std::string response = readLspMessage();
+        jsonrpccxx::json json_msg = jsonrpccxx::json::parse(request);
+        if (json_msg.contains("id") && !json_msg["id"].is_null()) {
+            request_id = json_msg["id"].get<int>();
+        }
+    } catch (const std::exception& e) {
+        // 如果解析失败，无法匹配 ID，继续使用原来的逻辑
+    }
+    
+    try {
+        // 可能需要读取多个消息，跳过通知消息，直到找到匹配的请求响应
+        int max_attempts = 10;  // 最多尝试 10 次，防止无限循环
+        int attempts = 0;
         
+        while (attempts < max_attempts) {
+            std::string response = readLspMessage();
+            
+            // 验证响应不为空
+            if (response.empty()) {
+                throw jsonrpccxx::JsonRpcException(
+                    jsonrpccxx::error_type::internal_error,
+                    "Empty response from LSP server"
+                );
+            }
+            
+            // 检查是否是通知消息（包含 method 字段，没有 id 字段或 id 为 null）
+            try {
+                jsonrpccxx::json response_json = jsonrpccxx::json::parse(response);
+                
+                // 如果是通知消息（有 method 字段），跳过它
+                if (response_json.contains("method") && 
+                    (!response_json.contains("id") || response_json["id"].is_null())) {
+                    // 这是通知消息，继续读取下一个消息
+                    attempts++;
+                    continue;
+                }
+                
+                // 如果是响应消息，检查 ID 是否匹配
+                if (request_id >= 0 && response_json.contains("id")) {
+                    int response_id = response_json["id"].get<int>();
+                    if (response_id != request_id) {
+                        // ID 不匹配，可能是其他请求的响应，继续读取
+                        attempts++;
+                        continue;
+                    }
+                }
+                
+                // 找到了匹配的响应
 #ifndef USE_BOOST_PROCESS
-        // 恢复非阻塞模式（用于通知监听线程）
-        fcntl(stdout_fd_, F_SETFL, flags | O_NONBLOCK);
+                // 恢复非阻塞模式（用于通知监听线程）
+                fcntl(stdout_fd_, F_SETFL, flags | O_NONBLOCK);
 #endif
-        
-        // 验证响应不为空
-        if (response.empty()) {
-            throw jsonrpccxx::JsonRpcException(
-                jsonrpccxx::error_type::internal_error,
-                "Empty response from LSP server"
-            );
+                return response;
+                
+            } catch (const std::exception& e) {
+                // JSON 解析失败，可能是格式错误，直接返回
+#ifndef USE_BOOST_PROCESS
+                // 恢复非阻塞模式
+                fcntl(stdout_fd_, F_SETFL, flags | O_NONBLOCK);
+#endif
+                return response;
+            }
         }
         
-        return response;
+        // 如果尝试了多次仍然没有找到匹配的响应，抛出异常
+        throw jsonrpccxx::JsonRpcException(
+            jsonrpccxx::error_type::internal_error,
+            "Failed to find matching response after " + std::to_string(max_attempts) + " attempts"
+        );
+        
     } catch (const jsonrpccxx::JsonRpcException& e) {
 #ifndef USE_BOOST_PROCESS
         // 恢复非阻塞模式
@@ -420,14 +478,22 @@ std::string LspStdioConnector::readLine() {
     int flags = fcntl(stdout_fd_, F_GETFL, 0);
     bool is_nonblock = (flags & O_NONBLOCK) != 0;
     
-    if (is_nonblock) {
-        // 非阻塞模式：使用 select 检查是否有数据可用
+    // 无论阻塞还是非阻塞模式，都使用 select 来检查数据可用性并设置超时
+    // 这样可以避免在阻塞模式下无限期等待
     fd_set read_fds;
     FD_ZERO(&read_fds);
     FD_SET(stdout_fd_, &read_fds);
     struct timeval timeout;
+    
+    if (is_nonblock) {
+        // 非阻塞模式：100ms 超时
         timeout.tv_sec = 0;
-        timeout.tv_usec = 100000;  // 100ms 超时
+        timeout.tv_usec = 100000;  // 100ms
+    } else {
+        // 阻塞模式：使用更短的超时（2秒），避免长时间卡住
+        timeout.tv_sec = 2;
+        timeout.tv_usec = 0;
+    }
     
     int result = select(stdout_fd_ + 1, &read_fds, nullptr, nullptr, &timeout);
     if (result <= 0) {
@@ -435,13 +501,20 @@ std::string LspStdioConnector::readLine() {
         if (feof(stdout_file_)) {
             return "\x01EOF\x01";
         }
-            // 超时返回空字符串（不是错误）
-        return "";
+        if (result == 0) {
+            // 超时：在非阻塞模式下返回空，在阻塞模式下抛出异常
+            if (is_nonblock) {
+                return "";  // 非阻塞模式：超时返回空
+            } else {
+                // 阻塞模式：超时是错误，返回错误标记
+                return "\x02TIMEOUT\x02";
+            }
         }
+        // select 错误
+        return "\x02ERROR\x02";
     }
-    // 阻塞模式：直接读取，不需要 select
     
-    // 使用 fgets 读取一行
+    // 有数据可用，使用 fgets 读取一行
     char buffer[1024];
     if (fgets(buffer, sizeof(buffer), stdout_file_)) {
         line = buffer;
@@ -467,6 +540,7 @@ std::string LspStdioConnector::readLine() {
 }
 
 std::string LspStdioConnector::readLspMessage() {
+    auto read_start = std::chrono::steady_clock::now();
     std::string line;
     int content_length = -1;
     bool found_empty_line = false;
@@ -498,14 +572,22 @@ std::string LspStdioConnector::readLspMessage() {
             );
         }
         
+        // 检查是否是超时标记（阻塞模式下的超时）
+        if (line == "\x02TIMEOUT\x02") {
+            auto timeout_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - read_start);
+            throw jsonrpccxx::JsonRpcException(
+                jsonrpccxx::error_type::internal_error,
+                "Timeout waiting for message headers (waited " + 
+                std::to_string(timeout_time.count()) + " ms)"
+            );
+        }
+        
         // 在非阻塞模式下，readLine() 可能返回空字符串（超时）
-        // 在阻塞模式下，这不应该发生
+        // 在阻塞模式下，这不应该发生（应该返回 TIMEOUT 标记）
         if (line.empty() && line_count == 1) {
-            LOG_ERROR("First readLine() returned empty (timeout or no data)");
             // 第一次读取就返回空，可能是非阻塞模式下的超时
-            // 在阻塞模式下，这不应该发生，所以继续
             // 在非阻塞模式下，这表示暂时没有数据，应该抛出异常
-            // 但这是通知监听线程，应该继续循环而不是抛出异常
             throw jsonrpccxx::JsonRpcException(
                 jsonrpccxx::error_type::internal_error,
                 "Timeout waiting for message headers"
@@ -616,7 +698,6 @@ std::string LspStdioConnector::readLspMessage() {
         );
     }
 #endif
-    
     return message;
 }
 
@@ -644,21 +725,47 @@ void LspStdioConnector::startNotificationListener() {
                 }
                 
                 // 有数据可用，尝试读取完整的 LSP 消息
-                // 注意：readLspMessage() 会重新读取，所以我们需要确保不会丢失数据
-                // 但由于我们使用行缓冲，应该没问题
-            try {
-                std::string notification = readLspMessage();
+                // 使用 try_lock 避免在 Send() 读取响应时长时间阻塞
+                std::unique_lock<std::mutex> request_lock(request_mutex_, std::try_to_lock);
+                if (!request_lock.owns_lock()) {
+                    // 如果无法获取锁，说明 Send() 正在读取响应，等待一下再试
+                    usleep(10000);  // 10ms
+                    continue;
+                }
+                
+                // 检查是否是通知消息（只读取通知，不读取请求响应）
+                // 通过 peek 消息来判断，如果是通知则读取，否则跳过
+                try {
+                    std::string message = readLspMessage();
                     
-                    // 检查通知是否为空
-                    if (notification.empty()) {
+                    // 检查消息是否为空
+                    if (message.empty()) {
                         continue;
                     }
-                
-                std::lock_guard<std::mutex> lock(notification_mutex_);
-                notification_queue_.push(notification);
-                
-                if (notification_callback_) {
-                    notification_callback_(notification);
+                    
+                    // 解析消息，检查是否是通知
+                    try {
+                        jsonrpccxx::json msg_json = jsonrpccxx::json::parse(message);
+                        
+                        // 如果是通知消息（有 method 字段，没有 id 或 id 为 null）
+                        if (msg_json.contains("method") && 
+                            (!msg_json.contains("id") || msg_json["id"].is_null())) {
+                            // 这是通知消息，加入队列
+                            std::lock_guard<std::mutex> notif_lock(notification_mutex_);
+                            notification_queue_.push(message);
+                            
+                            if (notification_callback_) {
+                                notification_callback_(message);
+                            }
+                        } else {
+                            // 这是请求响应，不应该被通知监听线程读取
+                            // 这种情况不应该发生，因为 Send() 应该已经读取了
+                            // 但为了安全，我们将其放回（实际上无法放回，所以记录错误）
+                            LOG_ERROR("[LspConnector] Notification thread read a request response");
+                        }
+                    } catch (const std::exception& e) {
+                        // JSON 解析失败，可能是格式错误，跳过
+                        continue;
                     }
                 } catch (const jsonrpccxx::JsonRpcException& e) {
                     // 检查是否是超时（非阻塞模式下的正常情况）
