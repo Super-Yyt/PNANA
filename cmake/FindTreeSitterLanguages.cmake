@@ -13,7 +13,8 @@
 #   TreeSitter_<LANG>_LIBRARY   - 库文件路径
 #
 # 支持的语言:
-#   CPP, C, PYTHON, JAVASCRIPT, TYPESCRIPT, JSON, MARKDOWN, BASH, RUST, GO, JAVA
+#   CPP, C, PYTHON, JAVASCRIPT, TYPESCRIPT, JSON, MARKDOWN, BASH, RUST, GO, JAVA,
+#   CMAKE, TCL, FORTRAN, HASKELL, LUA
 
 # 查找函数
 function(find_tree_sitter_language lang_name lib_names display_name)
@@ -62,6 +63,11 @@ find_tree_sitter_language(BASH "tree-sitter-bash;libtree-sitter-bash" "Bash")
 find_tree_sitter_language(RUST "tree-sitter-rust;libtree-sitter-rust" "Rust")
 find_tree_sitter_language(GO "tree-sitter-go;libtree-sitter-go" "Go")
 find_tree_sitter_language(JAVA "tree-sitter-java;libtree-sitter-java" "Java")
+find_tree_sitter_language(CMAKE "tree-sitter-cmake;libtree-sitter-cmake" "CMake")
+find_tree_sitter_language(TCL "tree-sitter-tcl;libtree-sitter-tcl" "TCL")
+find_tree_sitter_language(FORTRAN "tree-sitter-fortran;libtree-sitter-fortran" "Fortran")
+find_tree_sitter_language(HASKELL "tree-sitter-haskell;libtree-sitter-haskell" "Haskell")
+find_tree_sitter_language(LUA "tree-sitter-lua;libtree-sitter-lua" "Lua")
 
 # 标记为高级变量
 mark_as_advanced(
@@ -76,5 +82,10 @@ mark_as_advanced(
     TreeSitter_RUST_LIBRARY
     TreeSitter_GO_LIBRARY
     TreeSitter_JAVA_LIBRARY
+    TreeSitter_CMAKE_LIBRARY
+    TreeSitter_TCL_LIBRARY
+    TreeSitter_FORTRAN_LIBRARY
+    TreeSitter_HASKELL_LIBRARY
+    TreeSitter_LUA_LIBRARY
 )
 
