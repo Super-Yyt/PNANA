@@ -137,6 +137,75 @@ void SyntaxHighlighter::initializeLanguages() {
         "print", "require", "package", "io", "os", "math", "string", "table",
         "coroutine", "debug"
     };
+    
+    // CMake 关键字
+    keywords_["cmake"] = {
+        "if", "else", "elseif", "endif", "foreach", "endforeach", "while", "endwhile",
+        "function", "endfunction", "macro", "endmacro", "break", "continue", "return",
+        "cmake_minimum_required", "project", "add_executable", "add_library",
+        "target_link_libraries", "include", "include_directories", "find_package",
+        "set", "unset", "list", "string", "math", "file", "message", "option",
+        "add_subdirectory", "install", "enable_testing", "add_test", "set_property",
+        "get_property", "target_compile_options", "target_include_directories"
+    };
+    
+    types_["cmake"] = {
+        "CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_BUILD_TYPE", "CMAKE_SOURCE_DIR",
+        "CMAKE_BINARY_DIR", "CMAKE_CURRENT_SOURCE_DIR", "CMAKE_CURRENT_BINARY_DIR",
+        "CMAKE_VERSION", "PROJECT_NAME", "PROJECT_VERSION", "BUILD_SHARED_LIBS"
+    };
+    
+    // TCL 关键字
+    keywords_["tcl"] = {
+        "if", "else", "elseif", "then", "for", "foreach", "while", "break", "continue",
+        "proc", "return", "global", "upvar", "uplevel", "namespace", "variable",
+        "set", "unset", "append", "lappend", "incr", "expr", "eval", "subst",
+        "catch", "error", "throw", "try", "finally", "switch", "case", "default",
+        "package", "require", "provide", "source", "uplevel", "upvar", "array",
+        "dict", "list", "string", "regexp", "regsub", "file", "open", "close",
+        "puts", "gets", "read", "seek", "tell", "flush", "eof", "fconfigure"
+    };
+    
+    types_["tcl"] = {
+        "tcl_version", "tcl_patchLevel", "tcl_library", "tcl_platform", "env",
+        "auto_path", "tcl_pkgPath", "errorCode", "errorInfo", "argv", "argc"
+    };
+    
+    // Fortran 关键字
+    keywords_["fortran"] = {
+        "program", "end", "subroutine", "function", "module", "use", "contains",
+        "implicit", "none", "integer", "real", "double", "precision", "complex",
+        "logical", "character", "allocatable", "dimension", "parameter", "data",
+        "if", "then", "else", "elseif", "endif", "select", "case", "default",
+        "do", "while", "enddo", "continue", "cycle", "exit", "goto", "return",
+        "call", "intent", "in", "out", "inout", "optional", "save", "public",
+        "private", "interface", "abstract", "type", "endtype", "class", "procedure",
+        "allocate", "deallocate", "nullify", "associate", "block", "endblock"
+    };
+    
+    types_["fortran"] = {
+        "integer", "real", "double", "precision", "complex", "logical", "character",
+        "kind", "len", "allocatable", "pointer", "target", "intent", "optional"
+    };
+    
+    // Haskell 关键字
+    keywords_["haskell"] = {
+        "data", "type", "newtype", "class", "instance", "where", "let", "in",
+        "if", "then", "else", "case", "of", "do", "where", "deriving", "import",
+        "module", "qualified", "as", "hiding", "infix", "infixl", "infixr",
+        "type", "family", "instance", "default", "foreign", "export", "ccall",
+        "safe", "unsafe", "forall", "forall", "mdo", "rec", "proc", "->", "=>",
+        "::", "=", "<-", "->", "|", "..", "...", "\\", "|", "guard", "when",
+        "unless", "return", "fail", ">>=", ">>", "=<<", "<*>", "<$>", "<$"
+    };
+    
+    types_["haskell"] = {
+        "Int", "Integer", "Float", "Double", "Bool", "Char", "String", "Maybe",
+        "Either", "IO", "[]", "()", "Ordering", "Eq", "Ord", "Show", "Read",
+        "Enum", "Bounded", "Num", "Real", "Integral", "Fractional", "Floating",
+        "Functor", "Applicative", "Monad", "Monoid", "Semigroup", "Foldable",
+        "Traversable", "MonadIO", "MonadState", "MonadReader", "MonadWriter"
+    };
 }
 
 void SyntaxHighlighter::setFileType(const std::string& file_type) {
@@ -144,9 +213,12 @@ void SyntaxHighlighter::setFileType(const std::string& file_type) {
         current_file_type_ = file_type;
         
         // 如果使用 Tree-sitter，更新其文件类型
+        // 即使 Tree-sitter 不支持该文件类型，也调用 setFileType 以确保状态正确重置
 #ifdef BUILD_TREE_SITTER_SUPPORT
         if (backend_ == SyntaxHighlightBackend::TREE_SITTER && tree_sitter_highlighter_) {
             tree_sitter_highlighter_->setFileType(file_type);
+            // 如果 Tree-sitter 不支持该文件类型，setFileType 会将 current_language_ 设置为 nullptr
+            // 在 highlightLine 中会检查 supportsFileType，如果不支持则使用本地语法高亮
         }
 #endif
         
@@ -167,10 +239,16 @@ ftxui::Element SyntaxHighlighter::highlightLine(const std::string& line) {
     // 根据后端选择不同的实现
 #ifdef BUILD_TREE_SITTER_SUPPORT
     if (backend_ == SyntaxHighlightBackend::TREE_SITTER && tree_sitter_highlighter_) {
+        // 检查 Tree-sitter 是否支持当前文件类型
+        if (tree_sitter_highlighter_->supportsFileType(current_file_type_)) {
         try {
             return tree_sitter_highlighter_->highlightLine(line);
         } catch (...) {
-            // Tree-sitter 失败，回退到原生实现
+                // Tree-sitter 处理失败，回退到原生实现
+                return highlightLineNative(line);
+            }
+        } else {
+            // Tree-sitter 不支持该文件类型，直接使用本地语法高亮
             return highlightLineNative(line);
         }
     }
@@ -236,6 +314,14 @@ std::vector<Token> SyntaxHighlighter::tokenize(const std::string& line) {
         return tokenizeShell(line);
     } else if (current_file_type_ == "lua") {
         return tokenizeLua(line);
+    } else if (current_file_type_ == "cmake") {
+        return tokenizeCMake(line);
+    } else if (current_file_type_ == "tcl") {
+        return tokenizeTCL(line);
+    } else if (current_file_type_ == "fortran") {
+        return tokenizeFortran(line);
+    } else if (current_file_type_ == "haskell") {
+        return tokenizeHaskell(line);
     }
     
     // 默认：不高亮
@@ -1487,6 +1573,405 @@ bool SyntaxHighlighter::isTreeSitterAvailable() {
 #else
     return false;
 #endif
+}
+
+std::vector<Token> SyntaxHighlighter::tokenizeCMake(const std::string& line) {
+    std::vector<Token> tokens;
+    size_t i = 0;
+    
+    while (i < line.length()) {
+        if (std::isspace(line[i])) {
+            size_t start = i;
+            while (i < line.length() && std::isspace(line[i])) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::NORMAL, start, i});
+            continue;
+        }
+        
+        if (line[i] == '#') {
+            tokens.push_back({line.substr(i), TokenType::COMMENT, i, line.length()});
+            break;
+        }
+        
+        if (line[i] == '"' || line[i] == '\'') {
+            char quote = line[i];
+            size_t start = i;
+            i++;
+            while (i < line.length() && line[i] != quote) {
+                if (line[i] == '\\' && i + 1 < line.length()) i += 2;
+                else i++;
+            }
+            if (i < line.length()) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        if (line[i] == '$') {
+            size_t start = i;
+            i++;
+            if (i < line.length() && line[i] == '{') {
+                i++;
+                while (i < line.length() && line[i] != '}') i++;
+                if (i < line.length()) i++;
+            } else if (i + 4 < line.length() && line.substr(i, 4) == "ENV{") {
+                i += 4;
+                while (i < line.length() && line[i] != '}') i++;
+                if (i < line.length()) i++;
+            }
+            tokens.push_back({line.substr(start, i - start), TokenType::TYPE, start, i});
+            continue;
+        }
+        
+        if (std::isdigit(line[i]) || (line[i] == '.' && i + 1 < line.length() && std::isdigit(line[i + 1]))) {
+            size_t start = i;
+            i = parseNumber(line, start);
+            tokens.push_back({line.substr(start, i - start), TokenType::NUMBER, start, i});
+            continue;
+        }
+        
+        unsigned char c = static_cast<unsigned char>(line[i]);
+        if (isAsciiAlpha(c) || line[i] == '_') {
+            size_t start = i;
+            while (i < line.length()) {
+                unsigned char ch = static_cast<unsigned char>(line[i]);
+                if (isAsciiAlnum(ch) || ch == '_') {
+                    i++;
+                } else if ((ch & 0x80) != 0) {
+                    break;
+                } else {
+                    break;
+                }
+            }
+            std::string word = line.substr(start, i - start);
+            TokenType type = TokenType::NORMAL;
+            if (isKeyword(word)) {
+                type = TokenType::KEYWORD;
+            } else if (isType(word)) {
+                type = TokenType::TYPE;
+            } else if (i < line.length() && line[i] == '(') {
+                type = TokenType::FUNCTION;
+            }
+            tokens.push_back({word, type, start, i});
+            continue;
+        }
+        
+        if (isOperator(line[i])) {
+            tokens.push_back({std::string(1, line[i]), TokenType::OPERATOR, i, i + 1});
+            i++;
+            continue;
+        }
+        
+        tokens.push_back({std::string(1, line[i]), TokenType::NORMAL, i, i + 1});
+        i++;
+    }
+    
+    return tokens;
+}
+
+std::vector<Token> SyntaxHighlighter::tokenizeTCL(const std::string& line) {
+    std::vector<Token> tokens;
+    size_t i = 0;
+    
+    while (i < line.length()) {
+        if (std::isspace(line[i])) {
+            size_t start = i;
+            while (i < line.length() && std::isspace(line[i])) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::NORMAL, start, i});
+            continue;
+        }
+        
+        if (line[i] == '#') {
+            tokens.push_back({line.substr(i), TokenType::COMMENT, i, line.length()});
+            break;
+        }
+        
+        if (line[i] == '{') {
+            size_t start = i;
+            i++;
+            int brace_count = 1;
+            while (i < line.length() && brace_count > 0) {
+                if (line[i] == '{') brace_count++;
+                else if (line[i] == '}') brace_count--;
+                i++;
+            }
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        if (line[i] == '"') {
+            size_t start = i;
+            i++;
+            while (i < line.length() && line[i] != '"') {
+                if (line[i] == '\\' && i + 1 < line.length()) i += 2;
+                else i++;
+            }
+            if (i < line.length()) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        if (line[i] == '$') {
+            size_t start = i;
+            i++;
+            if (i < line.length() && line[i] == '{') {
+                i++;
+                while (i < line.length() && line[i] != '}') i++;
+                if (i < line.length()) i++;
+            } else {
+                while (i < line.length() && (std::isalnum(line[i]) || line[i] == '_')) i++;
+            }
+            tokens.push_back({line.substr(start, i - start), TokenType::TYPE, start, i});
+            continue;
+        }
+        
+        if (std::isdigit(line[i]) || (line[i] == '.' && i + 1 < line.length() && std::isdigit(line[i + 1]))) {
+            size_t start = i;
+            i = parseNumber(line, start);
+            tokens.push_back({line.substr(start, i - start), TokenType::NUMBER, start, i});
+            continue;
+        }
+        
+        unsigned char c = static_cast<unsigned char>(line[i]);
+        if (isAsciiAlpha(c) || line[i] == '_' || line[i] == ':') {
+            size_t start = i;
+            while (i < line.length()) {
+                unsigned char ch = static_cast<unsigned char>(line[i]);
+                if (isAsciiAlnum(ch) || ch == '_' || ch == ':') {
+                    i++;
+                } else if ((ch & 0x80) != 0) {
+                    break;
+                } else {
+                    break;
+                }
+            }
+            std::string word = line.substr(start, i - start);
+            TokenType type = TokenType::NORMAL;
+            if (isKeyword(word)) {
+                type = TokenType::KEYWORD;
+            } else if (isType(word)) {
+                type = TokenType::TYPE;
+            } else if (i < line.length() && line[i] == '(') {
+                type = TokenType::FUNCTION;
+            }
+            tokens.push_back({word, type, start, i});
+            continue;
+        }
+        
+        if (isOperator(line[i])) {
+            tokens.push_back({std::string(1, line[i]), TokenType::OPERATOR, i, i + 1});
+            i++;
+            continue;
+        }
+        
+        tokens.push_back({std::string(1, line[i]), TokenType::NORMAL, i, i + 1});
+        i++;
+    }
+    
+    return tokens;
+}
+
+std::vector<Token> SyntaxHighlighter::tokenizeFortran(const std::string& line) {
+    std::vector<Token> tokens;
+    size_t i = 0;
+    
+    if (line.length() > 0 && (line[0] == 'C' || line[0] == 'c' || line[0] == '*' || line[0] == '!')) {
+        tokens.push_back({line, TokenType::COMMENT, 0, line.length()});
+        return tokens;
+    }
+    
+    while (i < line.length()) {
+        if (std::isspace(line[i])) {
+            size_t start = i;
+            while (i < line.length() && std::isspace(line[i])) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::NORMAL, start, i});
+            continue;
+        }
+        
+        if (line[i] == '!') {
+            tokens.push_back({line.substr(i), TokenType::COMMENT, i, line.length()});
+            break;
+        }
+        
+        if (line[i] == '"' || line[i] == '\'') {
+            char quote = line[i];
+            size_t start = i;
+            i++;
+            while (i < line.length() && line[i] != quote) {
+                if (line[i] == quote && i + 1 < line.length() && line[i + 1] == quote) {
+                    i += 2;
+                } else {
+                    i++;
+                }
+            }
+            if (i < line.length()) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        if (std::isdigit(line[i]) || (line[i] == '.' && i + 1 < line.length() && std::isdigit(line[i + 1]))) {
+            size_t start = i;
+            while (i < line.length() && (std::isdigit(line[i]) || line[i] == '.')) i++;
+            if (i < line.length() && (line[i] == 'e' || line[i] == 'E' || line[i] == 'd' || line[i] == 'D')) {
+                i++;
+                if (i < line.length() && (line[i] == '+' || line[i] == '-')) i++;
+                while (i < line.length() && std::isdigit(line[i])) i++;
+            }
+            tokens.push_back({line.substr(start, i - start), TokenType::NUMBER, start, i});
+            continue;
+        }
+        
+        unsigned char c = static_cast<unsigned char>(line[i]);
+        if (isAsciiAlpha(c) || line[i] == '_') {
+            size_t start = i;
+            while (i < line.length()) {
+                unsigned char ch = static_cast<unsigned char>(line[i]);
+                if (isAsciiAlnum(ch) || ch == '_') {
+                    i++;
+                } else if ((ch & 0x80) != 0) {
+                    break;
+                } else {
+                    break;
+                }
+            }
+            std::string word = line.substr(start, i - start);
+            std::string word_lower = word;
+            std::transform(word_lower.begin(), word_lower.end(), word_lower.begin(), ::tolower);
+            TokenType type = TokenType::NORMAL;
+            if (isKeyword(word_lower)) {
+                type = TokenType::KEYWORD;
+            } else if (isType(word_lower)) {
+                type = TokenType::TYPE;
+            } else if (i < line.length() && line[i] == '(') {
+                type = TokenType::FUNCTION;
+            }
+            tokens.push_back({word, type, start, i});
+            continue;
+        }
+        
+        if (isOperator(line[i])) {
+            tokens.push_back({std::string(1, line[i]), TokenType::OPERATOR, i, i + 1});
+            i++;
+            continue;
+        }
+        
+        tokens.push_back({std::string(1, line[i]), TokenType::NORMAL, i, i + 1});
+        i++;
+    }
+    
+    return tokens;
+}
+
+std::vector<Token> SyntaxHighlighter::tokenizeHaskell(const std::string& line) {
+    std::vector<Token> tokens;
+    size_t i = 0;
+    
+    while (i < line.length()) {
+        if (std::isspace(line[i])) {
+            size_t start = i;
+            while (i < line.length() && std::isspace(line[i])) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::NORMAL, start, i});
+            continue;
+        }
+        
+        if (i + 1 < line.length() && line[i] == '-' && line[i + 1] == '-') {
+            tokens.push_back({line.substr(i), TokenType::COMMENT, i, line.length()});
+            break;
+        }
+        
+        if (i + 1 < line.length() && line[i] == '{' && line[i + 1] == '-') {
+            size_t start = i;
+            i += 2;
+            while (i + 1 < line.length() && !(line[i] == '-' && line[i + 1] == '}')) {
+                i++;
+            }
+            if (i + 1 < line.length()) i += 2;
+            tokens.push_back({line.substr(start, i - start), TokenType::COMMENT, start, i});
+            continue;
+        }
+        
+        if (line[i] == '"') {
+            size_t start = i;
+            i++;
+            while (i < line.length() && line[i] != '"') {
+                if (line[i] == '\\' && i + 1 < line.length()) i += 2;
+                else i++;
+            }
+            if (i < line.length()) i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        if (line[i] == '\'') {
+            size_t start = i;
+            i++;
+            if (i < line.length() && line[i] == '\\' && i + 1 < line.length()) {
+                i += 2;
+            } else if (i < line.length()) {
+                i++;
+            }
+            if (i < line.length() && line[i] == '\'') i++;
+            tokens.push_back({line.substr(start, i - start), TokenType::STRING, start, i});
+            continue;
+        }
+        
+        if (std::isdigit(line[i]) || (line[i] == '.' && i + 1 < line.length() && std::isdigit(line[i + 1]))) {
+            size_t start = i;
+            i = parseNumber(line, start);
+            tokens.push_back({line.substr(start, i - start), TokenType::NUMBER, start, i});
+            continue;
+        }
+        
+        if (i + 1 < line.length()) {
+            std::string two_char = line.substr(i, 2);
+            if (two_char == "->" || two_char == "=>" || two_char == "::" || 
+                two_char == "++" || two_char == "==" || two_char == "/=" ||
+                two_char == "<=" || two_char == ">=" || two_char == "&&" || 
+                two_char == "||" || two_char == ">>" || two_char == ">>=" ||
+                two_char == "=<<" || two_char == "<$>" || two_char == "<*>") {
+                tokens.push_back({two_char, TokenType::OPERATOR, i, i + 2});
+                i += 2;
+                continue;
+            }
+        }
+        
+        unsigned char c = static_cast<unsigned char>(line[i]);
+        if (isAsciiAlpha(c) || line[i] == '_') {
+            size_t start = i;
+            while (i < line.length()) {
+                unsigned char ch = static_cast<unsigned char>(line[i]);
+                if (isAsciiAlnum(ch) || ch == '_' || ch == '\'') {
+                    i++;
+                } else if ((ch & 0x80) != 0) {
+                    break;
+                } else {
+                    break;
+                }
+            }
+            std::string word = line.substr(start, i - start);
+            TokenType type = TokenType::NORMAL;
+            if (isKeyword(word)) {
+                type = TokenType::KEYWORD;
+            } else if (isType(word)) {
+                type = TokenType::TYPE;
+            } else if (i < line.length() && line[i] == '(') {
+                type = TokenType::FUNCTION;
+            } else if (!word.empty() && std::isupper(static_cast<unsigned char>(word[0]))) {
+                type = TokenType::TYPE;
+            }
+            tokens.push_back({word, type, start, i});
+            continue;
+        }
+        
+        if (isOperator(line[i])) {
+            tokens.push_back({std::string(1, line[i]), TokenType::OPERATOR, i, i + 1});
+            i++;
+            continue;
+        }
+        
+        tokens.push_back({std::string(1, line[i]), TokenType::NORMAL, i, i + 1});
+        i++;
+    }
+    
+    return tokens;
 }
 
 } // namespace features

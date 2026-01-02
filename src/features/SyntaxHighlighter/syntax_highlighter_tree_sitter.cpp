@@ -51,6 +51,31 @@ extern "C" {
     #ifdef BUILD_TREE_SITTER_JAVA
     TSLanguage* tree_sitter_java();
     #endif
+    
+    // CMake
+    #ifdef BUILD_TREE_SITTER_CMAKE
+    TSLanguage* tree_sitter_cmake();
+    #endif
+    
+    // TCL
+    #ifdef BUILD_TREE_SITTER_TCL
+    TSLanguage* tree_sitter_tcl();
+    #endif
+    
+    // Fortran
+    #ifdef BUILD_TREE_SITTER_FORTRAN
+    TSLanguage* tree_sitter_fortran();
+    #endif
+    
+    // Haskell
+    #ifdef BUILD_TREE_SITTER_HASKELL
+    TSLanguage* tree_sitter_haskell();
+    #endif
+    
+    // Lua
+    #ifdef BUILD_TREE_SITTER_LUA
+    TSLanguage* tree_sitter_lua();
+    #endif
 }
 
 using namespace ftxui;
@@ -184,6 +209,64 @@ void SyntaxHighlighterTreeSitter::initializeLanguages() {
     TSLanguage* java_lang = tree_sitter_java();
     if (java_lang) {
         language_map_["java"] = java_lang;
+    }
+    #endif
+    
+    // CMake
+    #ifdef BUILD_TREE_SITTER_CMAKE
+    TSLanguage* cmake_lang = tree_sitter_cmake();
+    if (cmake_lang) {
+        language_map_["cmake"] = cmake_lang;
+        language_map_["cmake.in"] = cmake_lang;
+        language_map_["cmake.in.in"] = cmake_lang;
+    }
+    #endif
+    
+    // TCL
+    #ifdef BUILD_TREE_SITTER_TCL
+    TSLanguage* tcl_lang = tree_sitter_tcl();
+    if (tcl_lang) {
+        language_map_["tcl"] = tcl_lang;
+        language_map_["tk"] = tcl_lang;
+        language_map_["portfile"] = tcl_lang;  // MacPorts portfiles
+    }
+    #endif
+    
+    // Fortran
+    #ifdef BUILD_TREE_SITTER_FORTRAN
+    TSLanguage* fortran_lang = tree_sitter_fortran();
+    if (fortran_lang) {
+        language_map_["f90"] = fortran_lang;
+        language_map_["f95"] = fortran_lang;
+        language_map_["f03"] = fortran_lang;
+        language_map_["f08"] = fortran_lang;
+        language_map_["f"] = fortran_lang;
+        language_map_["for"] = fortran_lang;
+        language_map_["ftn"] = fortran_lang;
+        language_map_["fpp"] = fortran_lang;
+        language_map_["fortran"] = fortran_lang;
+    }
+    #endif
+    
+    // Haskell
+    #ifdef BUILD_TREE_SITTER_HASKELL
+    TSLanguage* haskell_lang = tree_sitter_haskell();
+    if (haskell_lang) {
+        language_map_["hs"] = haskell_lang;
+        language_map_["haskell"] = haskell_lang;
+        language_map_["lhs"] = haskell_lang;  // Literate Haskell
+    }
+    #endif
+    
+    // Lua
+    #ifdef BUILD_TREE_SITTER_LUA
+    TSLanguage* lua_lang = tree_sitter_lua();
+    if (lua_lang) {
+        language_map_["lua"] = lua_lang;
+        language_map_["lua5.1"] = lua_lang;
+        language_map_["lua5.2"] = lua_lang;
+        language_map_["lua5.3"] = lua_lang;
+        language_map_["lua5.4"] = lua_lang;
     }
     #endif
 }
