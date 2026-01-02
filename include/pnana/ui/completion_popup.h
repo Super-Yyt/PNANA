@@ -75,6 +75,9 @@ private:
     int popup_width_;
     int popup_height_;
     
+    // 用于避免抖动的状态跟踪
+    size_t last_items_size_;
+    
     // 计算显示范围
     size_t getDisplayStart() const;
     size_t getDisplayEnd() const;

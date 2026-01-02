@@ -570,37 +570,37 @@ ThemeColors Theme::OceanicNext() {
     return colors;
 }
 
-ThemeColors Theme::Snazzy() {
+ThemeColors Theme::Kanagawa() {
     ThemeColors colors;
-    colors.background = Color::RGB(30, 31, 41);            // #1e1f29
-    colors.foreground = Color::RGB(239, 241, 245);         // #eff1f5
-    colors.current_line = Color::RGB(40, 42, 54);          // #282a36
-    colors.selection = Color::RGB(68, 71, 90);            // #44475a
-    colors.line_number = Color::RGB(98, 114, 164);        // #6272a4
-    colors.line_number_current = Color::RGB(239, 241, 245); // #eff1f5
+    colors.background = Color::RGB(31, 31, 40);            // #1f1f28
+    colors.foreground = Color::RGB(220, 215, 186);         // #dcd7ba
+    colors.current_line = Color::RGB(42, 42, 55);          // #2a2a37
+    colors.selection = Color::RGB(45, 79, 103);           // #2d4f67
+    colors.line_number = Color::RGB(114, 113, 105);        // #727169
+    colors.line_number_current = Color::RGB(220, 215, 186); // #dcd7ba
     
-    colors.statusbar_bg = Color::RGB(40, 42, 54);         // #282a36
-    colors.statusbar_fg = Color::RGB(239, 241, 245);      // #eff1f5
+    colors.statusbar_bg = Color::RGB(31, 31, 40);         // #1f1f28
+    colors.statusbar_fg = Color::RGB(220, 215, 186);      // #dcd7ba
     
-    colors.menubar_bg = Color::RGB(30, 31, 41);           // #1e1f29
-    colors.menubar_fg = Color::RGB(239, 241, 245);        // #eff1f5
+    colors.menubar_bg = Color::RGB(31, 31, 40);           // #1f1f28
+    colors.menubar_fg = Color::RGB(220, 215, 186);        // #dcd7ba
     
-    colors.helpbar_bg = Color::RGB(40, 42, 54);           // #282a36
-    colors.helpbar_fg = Color::RGB(98, 114, 164);          // #6272a4
-    colors.helpbar_key = Color::RGB(80, 250, 123);        // #50fa7b
+    colors.helpbar_bg = Color::RGB(31, 31, 40);           // #1f1f28
+    colors.helpbar_fg = Color::RGB(114, 113, 105);        // #727169
+    colors.helpbar_key = Color::RGB(126, 156, 216);      // #7e9cd8
     
-    colors.keyword = Color::RGB(255, 121, 198);           // #ff79c6
-    colors.string = Color::RGB(241, 250, 140);             // #f1fa8c
-    colors.comment = Color::RGB(98, 114, 164);             // #6272a4
-    colors.number = Color::RGB(189, 147, 249);            // #bd93f9
-    colors.function = Color::RGB(80, 250, 123);             // #50fa7b
-    colors.type = Color::RGB(139, 233, 253);               // #8be9fd
-    colors.operator_color = Color::RGB(255, 121, 198);     // #ff79c6
+    colors.keyword = Color::RGB(149, 127, 184);          // #957fb8
+    colors.string = Color::RGB(152, 187, 108);            // #98bb6c
+    colors.comment = Color::RGB(114, 113, 105);           // #727169
+    colors.number = Color::RGB(202, 169, 224);           // #caa9e0
+    colors.function = Color::RGB(126, 156, 216);         // #7e9cd8
+    colors.type = Color::RGB(127, 180, 202);              // #7fb4ca
+    colors.operator_color = Color::RGB(149, 127, 184);    // #957fb8
     
-    colors.error = Color::RGB(255, 85, 85);                // #ff5555
-    colors.warning = Color::RGB(255, 184, 108);            // #ffb86c
-    colors.info = Color::RGB(139, 233, 253);              // #8be9fd
-    colors.success = Color::RGB(80, 250, 123);              // #50fa7b
+    colors.error = Color::RGB(195, 64, 67);               // #c34043
+    colors.warning = Color::RGB(192, 163, 110);          // #c0a36e
+    colors.info = Color::RGB(126, 156, 216);             // #7e9cd8
+    colors.success = Color::RGB(152, 187, 108);          // #98bb6c
     
     return colors;
 }
@@ -815,72 +815,72 @@ ThemeColors Theme::PaperColor() {
     return colors;
 }
 
-ThemeColors Theme::Hybrid() {
+ThemeColors Theme::RosePine() {
     ThemeColors colors;
-    colors.background = Color::RGB(29, 31, 33);            // #1d1f21
-    colors.foreground = Color::RGB(197, 200, 198);         // #c5c8c6
-    colors.current_line = Color::RGB(40, 42, 46);          // #282a2e
-    colors.selection = Color::RGB(55, 59, 65);             // #373b41
-    colors.line_number = Color::RGB(150, 152, 150);       // #969896
-    colors.line_number_current = Color::RGB(197, 200, 198); // #c5c8c6
+    colors.background = Color::RGB(25, 23, 36);            // #191724
+    colors.foreground = Color::RGB(224, 222, 244);        // #e0def4
+    colors.current_line = Color::RGB(31, 29, 46);          // #1f1d2e
+    colors.selection = Color::RGB(64, 61, 88);             // #403d58
+    colors.line_number = Color::RGB(110, 106, 134);       // #6e6a86
+    colors.line_number_current = Color::RGB(224, 222, 244); // #e0def4
     
-    colors.statusbar_bg = Color::RGB(29, 31, 33);          // #1d1f21
-    colors.statusbar_fg = Color::RGB(197, 200, 198);      // #c5c8c6
+    colors.statusbar_bg = Color::RGB(31, 29, 46);         // #1f1d2e
+    colors.statusbar_fg = Color::RGB(224, 222, 244);       // #e0def4
     
-    colors.menubar_bg = Color::RGB(29, 31, 33);           // #1d1f21
-    colors.menubar_fg = Color::RGB(197, 200, 198);        // #c5c8c6
+    colors.menubar_bg = Color::RGB(25, 23, 36);           // #191724
+    colors.menubar_fg = Color::RGB(224, 222, 244);        // #e0def4
     
-    colors.helpbar_bg = Color::RGB(29, 31, 33);           // #1d1f21
-    colors.helpbar_fg = Color::RGB(150, 152, 150);        // #969896
-    colors.helpbar_key = Color::RGB(181, 189, 104);        // #b5bd68
+    colors.helpbar_bg = Color::RGB(31, 29, 46);           // #1f1d2e
+    colors.helpbar_fg = Color::RGB(110, 106, 134);         // #6e6a86
+    colors.helpbar_key = Color::RGB(156, 207, 216);       // #9ccfd8
     
-    colors.keyword = Color::RGB(129, 162, 190);            // #81a2be
-    colors.string = Color::RGB(184, 187, 38);              // #b8bb26
-    colors.comment = Color::RGB(150, 152, 150);            // #969896
-    colors.number = Color::RGB(250, 189, 47);              // #fabd2f
-    colors.function = Color::RGB(250, 189, 47);            // #fabd2f
-    colors.type = Color::RGB(131, 165, 152);               // #83a598
-    colors.operator_color = Color::RGB(129, 162, 190);     // #81a2be
+    colors.keyword = Color::RGB(235, 111, 146);           // #eb6f92
+    colors.string = Color::RGB(156, 207, 216);            // #9ccfd8
+    colors.comment = Color::RGB(110, 106, 134);           // #6e6a86
+    colors.number = Color::RGB(246, 193, 119);            // #f6c177
+    colors.function = Color::RGB(156, 207, 216);          // #9ccfd8
+    colors.type = Color::RGB(196, 167, 231);              // #c4a7e7
+    colors.operator_color = Color::RGB(235, 111, 146);     // #eb6f92
     
-    colors.error = Color::RGB(204, 102, 102);              // #cc6666
-    colors.warning = Color::RGB(250, 189, 47);             // #fabd2f
-    colors.info = Color::RGB(129, 162, 190);               // #81a2be
-    colors.success = Color::RGB(184, 187, 38);             // #b8bb26
+    colors.error = Color::RGB(235, 111, 146);             // #eb6f92
+    colors.warning = Color::RGB(246, 193, 119);           // #f6c177
+    colors.info = Color::RGB(156, 207, 216);              // #9ccfd8
+    colors.success = Color::RGB(156, 207, 216);           // #9ccfd8
     
     return colors;
 }
 
-ThemeColors Theme::Molokai() {
+ThemeColors Theme::Everforest() {
     ThemeColors colors;
-    colors.background = Color::RGB(27, 28, 27);            // #1b1c1b
-    colors.foreground = Color::RGB(249, 248, 245);         // #f9f8f5
-    colors.current_line = Color::RGB(61, 61, 61);          // #3d3d3d
-    colors.selection = Color::RGB(73, 72, 62);              // #49483e
-    colors.line_number = Color::RGB(117, 113, 94);        // #75715e
-    colors.line_number_current = Color::RGB(249, 248, 245); // #f9f8f5
+    colors.background = Color::RGB(40, 46, 52);            // #2d353b
+    colors.foreground = Color::RGB(220, 215, 195);         // #d3c6aa
+    colors.current_line = Color::RGB(52, 59, 66);          // #343f46
+    colors.selection = Color::RGB(64, 73, 82);             // #404850
+    colors.line_number = Color::RGB(124, 136, 148);       // #7c8898
+    colors.line_number_current = Color::RGB(220, 215, 195); // #d3c6aa
     
-    colors.statusbar_bg = Color::RGB(39, 40, 34);          // #272822
-    colors.statusbar_fg = Color::RGB(249, 248, 245);       // #f9f8f5
+    colors.statusbar_bg = Color::RGB(40, 46, 52);         // #2d353b
+    colors.statusbar_fg = Color::RGB(220, 215, 195);      // #d3c6aa
     
-    colors.menubar_bg = Color::RGB(27, 28, 27);            // #1b1c1b
-    colors.menubar_fg = Color::RGB(249, 248, 245);        // #f9f8f5
+    colors.menubar_bg = Color::RGB(40, 46, 52);           // #2d353b
+    colors.menubar_fg = Color::RGB(220, 215, 195);        // #d3c6aa
     
-    colors.helpbar_bg = Color::RGB(39, 40, 34);            // #272822
-    colors.helpbar_fg = Color::RGB(117, 113, 94);         // #75715e
-    colors.helpbar_key = Color::RGB(166, 226, 46);         // #a6e22e
+    colors.helpbar_bg = Color::RGB(40, 46, 52);          // #2d353b
+    colors.helpbar_fg = Color::RGB(124, 136, 148);        // #7c8898
+    colors.helpbar_key = Color::RGB(163, 190, 140);       // #a3be8c
     
-    colors.keyword = Color::RGB(249, 38, 114);             // #f92672
-    colors.string = Color::RGB(230, 219, 116);             // #e6db74
-    colors.comment = Color::RGB(117, 113, 94);             // #75715e
-    colors.number = Color::RGB(174, 129, 255);             // #ae81ff
-    colors.function = Color::RGB(166, 226, 46);            // #a6e22e
-    colors.type = Color::RGB(102, 217, 239);               // #66d9ef
-    colors.operator_color = Color::RGB(249, 38, 114);      // #f92672
+    colors.keyword = Color::RGB(143, 188, 187);          // #8fbcbb
+    colors.string = Color::RGB(163, 190, 140);            // #a3be8c
+    colors.comment = Color::RGB(124, 136, 148);          // #7c8898
+    colors.number = Color::RGB(233, 179, 101);            // #e9b365
+    colors.function = Color::RGB(163, 190, 140);         // #a3be8c
+    colors.type = Color::RGB(143, 188, 187);              // #8fbcbb
+    colors.operator_color = Color::RGB(143, 188, 187);    // #8fbcbb
     
-    colors.error = Color::RGB(249, 38, 114);              // #f92672
-    colors.warning = Color::RGB(253, 151, 31);             // #fd971f
-    colors.info = Color::RGB(102, 217, 239);               // #66d9ef
-    colors.success = Color::RGB(166, 226, 46);             // #a6e22e
+    colors.error = Color::RGB(231, 130, 132);            // #e78284
+    colors.warning = Color::RGB(233, 179, 101);          // #e9b365
+    colors.info = Color::RGB(143, 188, 187);             // #8fbcbb
+    colors.success = Color::RGB(163, 190, 140);           // #a3be8c
     
     return colors;
 }
@@ -1032,8 +1032,8 @@ void Theme::setTheme(const std::string& name) {
         colors_ = Palenight();
     } else if (name == "oceanic-next") {
         colors_ = OceanicNext();
-    } else if (name == "snazzy") {
-        colors_ = Snazzy();
+    } else if (name == "kanagawa") {
+        colors_ = Kanagawa();
     } else if (name == "tomorrow-night") {
         colors_ = TomorrowNight();
     } else if (name == "tomorrow-night-blue") {
@@ -1046,10 +1046,10 @@ void Theme::setTheme(const std::string& name) {
         colors_ = Base16Dark();
     } else if (name == "papercolor") {
         colors_ = PaperColor();
-    } else if (name == "hybrid") {
-        colors_ = Hybrid();
-    } else if (name == "molokai") {
-        colors_ = Molokai();
+    } else if (name == "rose-pine") {
+        colors_ = RosePine();
+    } else if (name == "everforest") {
+        colors_ = Everforest();
     } else if (name == "jellybeans") {
         colors_ = Jellybeans();
     } else if (name == "desert") {
@@ -1134,9 +1134,9 @@ std::vector<std::string> Theme::getAvailableThemes() {
         "onedark", "nord", "gruvbox", "tokyo-night",
         "catppuccin", "material", "ayu", "github",
         "vscode-dark", "night-owl", "palenight", "oceanic-next",
-        "snazzy", "tomorrow-night", "tomorrow-night-blue", "cobalt",
-        "zenburn", "base16-dark", "papercolor", "hybrid",
-        "molokai", "jellybeans", "desert", "slate"
+        "kanagawa", "tomorrow-night", "tomorrow-night-blue", "cobalt",
+        "zenburn", "base16-dark", "papercolor", "rose-pine",
+        "everforest", "jellybeans", "desert", "slate"
     };
 }
 

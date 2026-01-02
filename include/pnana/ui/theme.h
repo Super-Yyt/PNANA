@@ -67,15 +67,15 @@ public:
     static ThemeColors NightOwl();     // Night Owl
     static ThemeColors Palenight();    // Material Palenight
     static ThemeColors OceanicNext();  // Oceanic Next
-    static ThemeColors Snazzy();       // Snazzy
+    static ThemeColors Kanagawa();    // Kanagawa
     static ThemeColors TomorrowNight(); // Tomorrow Night
     static ThemeColors TomorrowNightBlue(); // Tomorrow Night Blue
     static ThemeColors Cobalt();       // Cobalt
     static ThemeColors Zenburn();      // Zenburn
     static ThemeColors Base16Dark();   // Base16 Dark
     static ThemeColors PaperColor();   // PaperColor Dark
-    static ThemeColors Hybrid();       // Hybrid
-    static ThemeColors Molokai();      // Molokai
+    static ThemeColors RosePine();     // Rose Pine
+    static ThemeColors Everforest();   // Everforest
     static ThemeColors Jellybeans();   // Jellybeans
     static ThemeColors Desert();       // Desert
     static ThemeColors Slate();        // Slate

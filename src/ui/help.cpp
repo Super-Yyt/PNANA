@@ -23,11 +23,10 @@ std::vector<HelpEntry> Help::getAllHelp() {
         
         // 编辑操作
         {"Editing", "Ctrl+Z", "Undo"},
-        {"Editing", "Ctrl+Y", "Redo (or Ctrl+Shift+Z)"},
+        {"Editing", "Ctrl+Y / Ctrl+Shift+Z", "Redo"},
         {"Editing", "Ctrl+X", "Cut"},
-        {"Editing", "Ctrl+C", "Copy"},
+        {"Editing", "Ctrl+P", "Copy"},
         {"Editing", "Ctrl+V", "Paste"},
-        {"Editing", "Ctrl+A", "Select all"},
         {"Editing", "Ctrl+D", "Duplicate line"},
         {"Editing", "Ctrl+Shift+K", "Delete line"},
         {"Editing", "Ctrl+Backspace", "Delete word"},
@@ -57,10 +56,12 @@ std::vector<HelpEntry> Help::getAllHelp() {
         // 选择
         {"Selection", "Shift+↑↓←→", "Select text"},
         {"Selection", "Ctrl+A", "Select all"},
+        {"Selection", "Alt+D", "Select word"},
+        {"Selection", "Alt+Shift+↑↓←→", "Extend selection"},
         
         // 标签页
-        {"Tabs", "Alt+Tab", "Next tab (or Ctrl+PageDown)"},
-        {"Tabs", "Alt+Shift+Tab", "Previous tab (or Ctrl+PageUp)"},
+        {"Tabs", "Alt+Tab / Ctrl+PageDown", "Next tab"},
+        {"Tabs", "Alt+Shift+Tab / Ctrl+PageUp", "Previous tab"},
         {"Tabs", "Ctrl+W", "Close tab"},
         
         // 视图

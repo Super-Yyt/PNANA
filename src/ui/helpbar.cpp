@@ -46,7 +46,7 @@ std::vector<HelpItem> Helpbar::getEditModeHelp() {
     return {
         {"^S", "Save"},
         {"^X", "Cut"},
-        {"^C", "Copy"},
+        {"^P", "Copy"},
         {"^V", "Paste"},
         {"^A", "Select All"},
         {"^Z", "Undo"},

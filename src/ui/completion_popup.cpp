@@ -1,9 +1,11 @@
 #include "ui/completion_popup.h"
 #include "ui/icons.h"
+#include "utils/logger.h"
 #include <ftxui/dom/elements.hpp>
 #include <algorithm>
 #include <sstream>
 #include <cmath>
+#include <chrono>
 
 using namespace ftxui;
 
@@ -13,12 +15,45 @@ namespace ui {
 CompletionPopup::CompletionPopup()
     : visible_(false), selected_index_(0), max_items_(15),  // 增加最大显示项数
       cursor_row_(0), cursor_col_(0), screen_width_(80), screen_height_(24),
-      popup_x_(0), popup_y_(0), popup_width_(70), popup_height_(17) {  // 增加默认宽度和高度
+      popup_x_(0), popup_y_(0), popup_width_(70), popup_height_(17),  // 增加默认宽度和高度
+      last_items_size_(0) {
 }
 
 void CompletionPopup::show(const std::vector<features::CompletionItem>& items,
                            int cursor_row, int cursor_col,
                            int screen_width, int screen_height) {
+    auto show_start = std::chrono::steady_clock::now();
+    LOG("[COMPLETION] [Popup] show() called with " + std::to_string(items.size()) + " items");
+    
+    // 参考 VSCode：优化响应速度，减少不必要的更新
+    bool was_visible = visible_;
+    
+    // 快速比较：检查内容是否真正变化
+    bool items_changed = (items_.size() != items.size());
+    if (!items_changed && items_.size() > 0 && items.size() > 0) {
+        // 比较前几个 item 的 label，如果相同则认为内容未变化
+        bool content_same = true;
+        size_t compare_count = std::min({items_.size(), items.size(), size_t(5)});  // 比较前 5 个
+        for (size_t i = 0; i < compare_count; ++i) {
+            if (items_[i].label != items[i].label) {
+                content_same = false;
+                break;
+            }
+        }
+        items_changed = !content_same;
+    }
+    
+    // 检查屏幕尺寸是否变化（需要重新计算位置）
+    bool screen_changed = (screen_width_ != screen_width || screen_height_ != screen_height);
+    
+    // 检查光标位置是否变化（需要重新计算位置）
+    bool cursor_changed = (cursor_row_ != cursor_row || cursor_col_ != cursor_col);
+    
+    LOG("[COMPLETION] [Popup] Changes: items=" + std::to_string(items_changed) + 
+        ", screen=" + std::to_string(screen_changed) + 
+        ", cursor=" + std::to_string(cursor_changed) + 
+        ", was_visible=" + std::to_string(was_visible));
+    
     items_ = items;
     cursor_row_ = cursor_row;
     cursor_col_ = cursor_col;
@@ -27,18 +62,42 @@ void CompletionPopup::show(const std::vector<features::CompletionItem>& items,
     selected_index_ = 0;
     visible_ = !items_.empty();
     
-    if (visible_) {
+    // 只在内容变化、屏幕尺寸变化、或光标位置变化时重新计算位置
+    // 这样可以减少不必要的计算，提高响应速度
+    if (visible_ && (items_changed || screen_changed || cursor_changed || !was_visible)) {
+        auto calc_start = std::chrono::steady_clock::now();
         calculatePopupPosition();
+        auto calc_end = std::chrono::steady_clock::now();
+        auto calc_time = std::chrono::duration_cast<std::chrono::microseconds>(
+            calc_end - calc_start);
+        LOG("[COMPLETION] [Popup] Calculated position (took " + 
+            std::to_string(calc_time.count() / 1000.0) + " ms)");
     }
+    
+    auto show_end = std::chrono::steady_clock::now();
+    auto show_time = std::chrono::duration_cast<std::chrono::microseconds>(
+        show_end - show_start);
+    LOG("[COMPLETION] [Popup] show() completed (took " + 
+        std::to_string(show_time.count() / 1000.0) + " ms, visible=" + 
+        std::to_string(visible_) + ")");
 }
 
 void CompletionPopup::updateCursorPosition(int row, int col, int screen_width, int screen_height) {
+    // 参考 Neovim：使用阈值机制，减少频繁的位置更新
+    int row_diff = std::abs(row - cursor_row_);
+    int col_diff = std::abs(col - cursor_col_);
+    bool screen_changed = (screen_width_ != screen_width || screen_height_ != screen_height);
+    
+    // 只在位置变化超过阈值或屏幕尺寸变化时才更新
+    // 阈值：行变化 >= 2，列变化 >= 5（增大阈值以减少抖动）
+    bool needs_update = screen_changed || row_diff >= 2 || col_diff >= 5;
+    
     cursor_row_ = row;
     cursor_col_ = col;
     screen_width_ = screen_width;
     screen_height_ = screen_height;
     
-    if (visible_) {
+    if (visible_ && needs_update) {
         calculatePopupPosition();
     }
 }
@@ -75,47 +134,121 @@ const features::CompletionItem* CompletionPopup::getSelectedItem() const {
 }
 
 void CompletionPopup::calculatePopupPosition() {
-    // 计算弹窗宽度（根据内容自适应，但不超过屏幕宽度）
-    popup_width_ = 70;  // 增加默认宽度，参考neovim
+    // ========== 参考 Neovim 的实现策略 ==========
+    // Neovim 使用固定尺寸的浮动窗口，避免频繁变化导致的抖动
+    // 策略：
+    // 1. 尺寸一旦确定就固定不变（除非内容发生重大变化）
+    // 2. 位置使用"锚点"机制，只在光标移动超过阈值时更新
+    // 3. 使用平滑的位置更新，避免突然跳跃
+    
+    // ========== 尺寸计算：固定策略 ==========
+    // 只在首次显示或 items 数量发生重大变化时更新尺寸
+    bool size_changed = false;
+    
+    if (popup_width_ == 0) {
+        // 首次计算：使用固定宽度策略
+        // Neovim 通常使用屏幕宽度的 40-60%，我们使用 50%
+        popup_width_ = std::min(80, (screen_width_ * 50) / 100);
+        if (popup_width_ < 50) popup_width_ = 50;  // 最小宽度
+        size_changed = true;
+    } else if (items_.size() != last_items_size_) {
+        // Items 数量变化：只在变化超过 50% 时才重新计算宽度
+        size_t size_diff = (items_.size() > last_items_size_) ? 
+                          (items_.size() - last_items_size_) : 
+                          (last_items_size_ - items_.size());
+        if (last_items_size_ > 0 && size_diff * 100 / last_items_size_ > 50) {
+            // 重新计算宽度（但保持稳定）
+            int max_width = 0;
     for (const auto& item : items_) {
         size_t item_width = item.label.length();
         if (!item.detail.empty()) {
-            item_width += item.detail.length() + 3;  // +3 for " - "
+                    item_width += item.detail.length() + 3;
         }
-        if (item_width > static_cast<size_t>(popup_width_)) {
-            popup_width_ = std::min(static_cast<int>(item_width) + 15, screen_width_ - 4);  // 增加边距
+                if (item_width > static_cast<size_t>(max_width)) {
+                    max_width = static_cast<int>(item_width) + 15;
+                }
+            }
+            int new_width = std::min(max_width, screen_width_ - 4);
+            // 只在宽度变化超过 10 个字符时才更新
+            if (std::abs(new_width - popup_width_) > 10) {
+                popup_width_ = new_width;
+                size_changed = true;
+            }
         }
+        last_items_size_ = items_.size();
     }
     
-    // 计算弹窗高度（根据显示项数）
+    // 高度：使用固定策略，不频繁变化
     size_t display_count = std::min(items_.size(), max_items_);
-    popup_height_ = static_cast<int>(display_count);  // 移除标题栏和分隔线
+    int new_height = static_cast<int>(display_count);
+    if (popup_height_ == 0) {
+        popup_height_ = new_height;
+        size_changed = true;
+    } else if (std::abs(new_height - popup_height_) > 5) {
+        // 只在高度变化超过 5 行时才更新
+        popup_height_ = new_height;
+        size_changed = true;
+    }
     
-    // 计算弹窗位置：在光标下方
-    // X位置：光标列位置，但如果会超出屏幕则左移
-    popup_x_ = cursor_col_;
-    if (popup_x_ + popup_width_ > screen_width_ - 2) {
-        popup_x_ = screen_width_ - popup_width_ - 2;
-        if (popup_x_ < 0) {
-            popup_x_ = 0;
-            popup_width_ = screen_width_ - 2;
+    // ========== 位置计算：锚点策略（参考 Neovim） ==========
+    // Neovim 使用"锚点"机制：位置相对于光标，但只在光标移动超过阈值时更新
+    // 这样可以避免光标微动时导致的抖动
+    
+    // 计算目标位置（相对于光标）
+    int target_x = cursor_col_;
+    if (target_x + popup_width_ > screen_width_ - 2) {
+        target_x = screen_width_ - popup_width_ - 2;
+        if (target_x < 0) {
+            target_x = 0;
         }
     }
     
-    // Y位置：光标行下方，但如果空间不够则显示在上方
-    // 假设每行高度为1，状态栏等占用约6行
-    int available_height = screen_height_ - 6;  // 减去状态栏等
-    int cursor_screen_y = cursor_row_;  // 简化：假设行号对应屏幕行
-    
+    // 计算目标 Y 位置
+    int available_height = screen_height_ - 6;
+    int cursor_screen_y = cursor_row_;
+    int target_y;
     if (cursor_screen_y + popup_height_ + 1 < available_height) {
-        // 显示在下方
-        popup_y_ = cursor_screen_y + 1;
+        target_y = cursor_screen_y + 1;
     } else if (cursor_screen_y > popup_height_ + 1) {
-        // 显示在上方
-        popup_y_ = cursor_screen_y - popup_height_ - 1;
+        target_y = cursor_screen_y - popup_height_ - 1;
     } else {
-        // 空间不够，显示在下方（即使会超出屏幕）
-        popup_y_ = cursor_screen_y + 1;
+        target_y = cursor_screen_y + 1;
+    }
+    
+    // ========== 位置更新策略：平滑更新 ==========
+    // 策略1：如果尺寸变化，立即更新位置
+    if (size_changed) {
+        popup_x_ = target_x;
+        popup_y_ = target_y;
+        return;
+    }
+    
+    // 策略2：如果位置未初始化，立即更新
+    if (popup_x_ == 0 && popup_y_ == 0) {
+        popup_x_ = target_x;
+        popup_y_ = target_y;
+        return;
+    }
+    
+    // 策略3：使用阈值机制，减少频繁更新
+    // X 方向：只在变化超过 5 个字符时更新（增大阈值以减少抖动）
+    int x_diff = std::abs(target_x - popup_x_);
+    if (x_diff > 5) {
+        popup_x_ = target_x;
+    }
+    
+    // Y 方向：只在变化超过 3 行时更新（增大阈值以减少抖动）
+    int y_diff = std::abs(target_y - popup_y_);
+    if (y_diff > 3) {
+        popup_y_ = target_y;
+    }
+    
+    // 策略4：如果光标移动导致 popup 超出屏幕，强制更新
+    if (popup_x_ + popup_width_ > screen_width_ - 2 || popup_x_ < 0) {
+        popup_x_ = target_x;
+    }
+    if (popup_y_ + popup_height_ > screen_height_ - 2 || popup_y_ < 0) {
+        popup_y_ = target_y;
     }
 }
 
