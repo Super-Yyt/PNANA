@@ -35,7 +35,6 @@ jobs:
           cmake \
           build-essential \
           pkg-config \
-          libftxui-dev \
           nlohmann-json3-dev \
           liblua5.4-dev \
           libtree-sitter-dev \
@@ -43,7 +42,29 @@ jobs:
           libavcodec-dev \
           libswscale-dev \
           libavutil-dev \
-          golang-go
+          golang-go \
+          libncurses-dev \
+          libtinfo-dev \
+          git
+
+    - name: Build and install FTXUI
+      run: |
+        echo "Building FTXUI from source..."
+        git clone --depth 1 --branch main https://github.com/ArthurSonzogni/FTXUI.git
+        cd FTXUI
+        mkdir build && cd build
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_STANDARD=17 \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DFTXUI_BUILD_EXAMPLES=OFF \
+          -DFTXUI_BUILD_DOCS=OFF \
+          -DFTXUI_ENABLE_INSTALL=ON
+        make -j$(nproc)
+        sudo make install
+        cd ../..
+        rm -rf FTXUI
+        echo "FTXUI installation completed"
 
     - name: Setup environment
       run: |

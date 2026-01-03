@@ -38,16 +38,49 @@ jobs:
     - name: Build and install FTXUI
       run: |
         echo "Building FTXUI from source..."
-        sudo apt-get install -y libncurses-dev
-        git clone https://github.com/ArthurSonzogni/FTXUI.git
+        # Install FTXUI build dependencies
+        sudo apt-get update
+        sudo apt-get install -y \
+          libncurses-dev \
+          libtinfo-dev \
+          build-essential \
+          cmake \
+          git
+
+        # Clone and build FTXUI
+        echo "Cloning FTXUI repository..."
+        git clone --depth 1 --branch main https://github.com/ArthurSonzogni/FTXUI.git
         cd FTXUI
+
+        echo "Building FTXUI..."
         mkdir build && cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_STANDARD=17 \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DFTXUI_BUILD_EXAMPLES=OFF \
+          -DFTXUI_BUILD_DOCS=OFF \
+          -DFTXUI_ENABLE_INSTALL=ON
+
+        echo "Compiling FTXUI..."
         make -j$(nproc)
+
+        echo "Installing FTXUI..."
         sudo make install
+
+        echo "Verifying FTXUI installation..."
+        if [ -f "/usr/local/lib/cmake/ftxui/ftxui-config.cmake" ] || [ -f "/usr/local/lib/libftxui.a" ]; then
+          echo "FTXUI installation successful"
+        else
+          echo "FTXUI installation verification failed"
+          ls -la /usr/local/lib/ | grep ftxui || echo "FTXUI library not found"
+          exit 1
+        fi
+
+        # Cleanup
         cd ../..
         rm -rf FTXUI
-        echo "FTXUI installation completed"
+        echo "FTXUI installation completed successfully"
 
     - name: Validate compilation
       run: |
