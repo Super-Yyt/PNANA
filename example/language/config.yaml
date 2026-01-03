@@ -1,0 +1,70 @@
+# YAML 配置文件示例
+# 这是一个YAML格式的配置文件
+
+# 基本数据类型
+name: "My Application"
+version: "1.0.0"
+enabled: true
+port: 8080
+timeout: 30.5
+
+# 嵌套对象
+database:
+  host: "localhost"
+  port: 5432
+  name: "myapp_db"
+  credentials:
+    username: "admin"
+    password: "secret123"
+
+# 数组
+servers:
+  - name: "server1"
+    ip: "192.168.1.10"
+    role: "master"
+  - name: "server2"
+    ip: "192.168.1.11"
+    role: "slave"
+  - name: "server3"
+    ip: "192.168.1.12"
+    role: "slave"
+
+# 多行字符串
+description: |
+  This is a multi-line string
+  in YAML format. It preserves
+  line breaks and indentation.
+
+# 折叠字符串
+summary: >
+  This is a folded string
+  that removes line breaks
+  and joins everything together.
+
+# 环境变量引用
+environment:
+  NODE_ENV: "production"
+  DATABASE_URL: "${DATABASE_HOST}:${DATABASE_PORT}/${DATABASE_NAME}"
+
+# 条件配置
+features:
+  authentication: true
+  logging:
+    level: "info"
+    format: "json"
+  caching:
+    enabled: true
+    ttl: 3600
+
+# 锚点和引用
+defaults: &defaults
+  timeout: 30
+  retries: 3
+
+api:
+  <<: *defaults
+  endpoint: "/api/v1"
+
+webhook:
+  <<: *defaults
+  url: "https://example.com/webhook"

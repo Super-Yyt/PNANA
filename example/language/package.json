@@ -1,0 +1,33 @@
+{
+  "name": "syntax-highlighting-test",
+  "version": "1.0.0",
+  "description": "Test files for syntax highlighting in various programming languages",
+  "main": "hello.js",
+  "scripts": {
+    "start": "node hello.js",
+    "test": "echo \"No tests specified\"",
+    "build": "echo \"No build process\"",
+    "lint": "echo \"No linting configured\""
+  },
+  "keywords": [
+    "syntax-highlighting",
+    "test",
+    "programming-languages",
+    "examples"
+  ],
+  "author": "Syntax Highlighting Tester",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/example/syntax-highlighting-test.git"
+  },
+  "bugs": {
+    "url": "https://github.com/example/syntax-highlighting-test/issues"
+  },
+  "homepage": "https://github.com/example/syntax-highlighting-test#readme"
+}
