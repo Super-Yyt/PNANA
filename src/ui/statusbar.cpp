@@ -10,6 +10,15 @@
 using namespace ftxui;
 // 不使用 using namespace icons，避免 FILE 名称冲突
 
+// 自定义删除器用于 FILE*，避免函数指针属性警告
+struct FileDeleter {
+    void operator()(FILE* file) const {
+        if (file) {
+            pclose(file);
+        }
+    }
+};
+
 namespace pnana {
 namespace ui {
 
@@ -453,7 +462,7 @@ std::string Statusbar::getGitBranch() {
     std::string result;
 
     // 使用 popen 执行 git 命令
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("git branch --show-current 2>/dev/null", "r"), pclose);
+    std::unique_ptr<FILE, FileDeleter> pipe(popen("git branch --show-current 2>/dev/null", "r"));
     if (!pipe) {
         return "";
     }
@@ -478,7 +487,7 @@ int Statusbar::getGitUncommittedCount() {
     int count = 0;
 
     // 使用 popen 执行 git 命令
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen("git status --porcelain 2>/dev/null", "r"), pclose);
+    std::unique_ptr<FILE, FileDeleter> pipe(popen("git status --porcelain 2>/dev/null", "r"));
     if (!pipe) {
         return 0;
     }
