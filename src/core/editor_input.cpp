@@ -3,6 +3,7 @@
 #include "core/input/input_router.h"
 #include "ui/icons.h"
 #include "input/key_action.h"
+#include "input/event_parser.h"
 #include "utils/logger.h"
 #include <ftxui/component/event.hpp>
 #include <iostream>
@@ -689,6 +690,17 @@ void Editor::handleNormalMode(Event event) {
         moveCursorPageUp();
     } else if (event == Event::PageDown) {
         moveCursorPageDown();
+    }
+
+    // 检查 Alt+0 和 Alt+9 组合键（也用于页面滚动）
+    pnana::input::EventParser parser;
+    std::string key_str = parser.eventToKey(event);
+    if (key_str == "alt_0") {
+        LOG("EditorInput: Alt+0 detected, calling moveCursorPageUp()");
+        moveCursorPageUp();
+    } else if (key_str == "alt_9") {
+        LOG("EditorInput: Alt+9 detected, calling moveCursorPageDown()");
+        moveCursorPageDown();
     } else if (event == Event::Backspace) {
         backspace();
     } else if (event == Event::Delete) {
@@ -1104,4 +1116,3 @@ void Editor::executeReplace() {
 
 } // namespace core
 } // namespace pnana
-

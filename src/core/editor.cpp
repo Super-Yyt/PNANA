@@ -4,6 +4,7 @@
 #include "core/ui/ui_router.h"
 #include "ui/icons.h"
 #include "utils/logger.h"
+#include "utils/file_type_detector.h"
 #include "features/encoding_converter.h"
 #ifdef BUILD_LUA_SUPPORT
 #include "plugins/plugin_manager.h"
@@ -47,7 +48,9 @@ Editor::Editor()
 #endif
       search_engine_(),
       file_browser_(theme_),
+#ifdef BUILD_IMAGE_PREVIEW_SUPPORT
       image_preview_(),
+#endif
       syntax_highlighter_(theme_),
       terminal_(theme_),
       split_view_manager_(),
@@ -95,6 +98,9 @@ Editor::Editor()
     initializeLsp();
     // 注意：lsp_enabled_ 在 initializeLsp() 中已经设置，不要重置为 false
     completion_trigger_delay_ = 0;
+
+    // 清理和迁移本地缓存文件到配置目录
+    cleanupLocalCacheFiles();
 #endif
 
 #ifdef BUILD_LUA_SUPPORT
@@ -947,82 +953,8 @@ std::string Editor::getFileType() const {
     if (!doc) {
         return "text";
     }
-    
-    // 检查文件名（用于特殊文件名如 CMakeLists.txt, Portfile 等）
-    std::string filename = doc->getFileName();
-    std::string ext = doc->getFileExtension();
-    
-    // 转换为小写进行比较（大小写不敏感）
-    std::string filename_lower = filename;
-    std::transform(filename_lower.begin(), filename_lower.end(), filename_lower.begin(), ::tolower);
-    
-    std::string ext_lower = ext;
-    std::transform(ext_lower.begin(), ext_lower.end(), ext_lower.begin(), ::tolower);
-    
-    // 特殊文件名检测（大小写不敏感）
-    if (filename_lower == "cmakelists.txt" || filename_lower == "cmake.in" || 
-        filename_lower == "cmake.in.in" || filename_lower.find("cmakelists") != std::string::npos) {
-        return "cmake";
-    }
-    if (filename_lower == "portfile") {
-        return "tcl";  // MacPorts portfiles are TCL
-    }
-    
-    // 文件扩展名检测（大小写不敏感）
-    // C/C++
-    if (ext_lower == "cpp" || ext_lower == "cc" || ext_lower == "cxx" || 
-        ext_lower == "h" || ext_lower == "hpp" || ext_lower == "hxx" || 
-        ext_lower == "hh" || ext_lower == "c++" || ext_lower == "h++") return "cpp";
-    if (ext_lower == "c") return "c";
-    
-    // Python
-    if (ext_lower == "py" || ext_lower == "pyw" || ext_lower == "pyi") return "python";
-    
-    // JavaScript/TypeScript
-    if (ext_lower == "js" || ext_lower == "jsx" || ext_lower == "mjs") return "javascript";
-    if (ext_lower == "ts" || ext_lower == "tsx") return "typescript";
-    
-    // Java
-    if (ext_lower == "java") return "java";
-    
-    // Go
-    if (ext_lower == "go") return "go";
-    
-    // Rust
-    if (ext_lower == "rs") return "rust";
-    
-    // Markdown
-    if (ext_lower == "md" || ext_lower == "markdown") return "markdown";
-    
-    // JSON
-    if (ext_lower == "json" || ext_lower == "jsonc") return "json";
-    
-    // HTML/CSS
-    if (ext_lower == "html" || ext_lower == "htm") return "html";
-    if (ext_lower == "css") return "css";
-    
-    // Shell
-    if (ext_lower == "sh" || ext_lower == "bash" || ext_lower == "zsh" || 
-        ext_lower == "shell") return "shell";
-    
-    // Lua
-    if (ext_lower == "lua") return "lua";
-    
-    // CMake
-    if (ext_lower == "cmake") return "cmake";
-    
-    // TCL
-    if (ext_lower == "tcl" || ext_lower == "tk") return "tcl";
-    
-    // Fortran
-    if (ext_lower == "f90" || ext_lower == "f95" || ext_lower == "f03" || 
-        ext_lower == "f08" || ext_lower == "f" || ext_lower == "for" || 
-        ext_lower == "ftn" || ext_lower == "fpp" || ext_lower == "fortran") return "fortran";
-    
-    // Haskell
-    if (ext_lower == "hs" || ext_lower == "lhs" || ext_lower == "haskell") return "haskell";
-    
-    return "text";
+
+    return utils::FileTypeDetector::detectFileType(doc->getFileName(), doc->getFileExtension());
 }
 
 bool Editor::isCtrlKey(const Event& event, char key) const {

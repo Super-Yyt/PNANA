@@ -24,7 +24,7 @@ namespace core {
 void Editor::initializeLsp() {
     // 创建 LSP 服务器管理器
     lsp_manager_ = std::make_unique<features::LspServerManager>();
-    
+
     // 设置诊断回调（应用到所有 LSP 客户端）
     lsp_manager_->setDiagnosticsCallback([this](
         const std::string& /* uri */,
@@ -48,10 +48,50 @@ void Editor::initializeLsp() {
             }
         }
     });
-    
+
     // LSP 管理器使用延迟初始化，只在需要时启动对应的服务器
         lsp_enabled_ = true;
     setStatusMessage("LSP manager initialized");
+}
+
+void Editor::cleanupLocalCacheFiles() {
+    // 检查工作目录是否存在 .cache 文件夹
+    fs::path current_dir = fs::current_path();
+    fs::path local_cache = current_dir / ".cache";
+
+    if (!fs::exists(local_cache)) {
+        return; // 没有本地缓存文件，无需处理
+    }
+
+    // 获取配置的缓存目录
+    std::string config_cache_dir = std::string(getenv("HOME")) + "/.config/pnana/.cache";
+
+    try {
+        // 确保配置的缓存目录存在
+        fs::create_directories(config_cache_dir);
+
+        // 移动 .cache 文件夹的内容到配置目录
+        // 如果目标目录已存在相应文件夹，则合并内容
+        for (const auto& entry : fs::directory_iterator(local_cache)) {
+            fs::path target_path = fs::path(config_cache_dir) / entry.path().filename();
+
+            if (fs::exists(target_path)) {
+                // 如果目标已存在，递归合并内容
+                fs::copy(entry.path(), target_path,
+                        fs::copy_options::recursive | fs::copy_options::overwrite_existing);
+            } else {
+                // 直接移动
+                fs::rename(entry.path(), target_path);
+            }
+        }
+
+        // 强制删除本地 .cache 文件夹及其内容
+        fs::remove_all(local_cache);
+
+        LOG("Migrated LSP cache files to: " + config_cache_dir);
+    } catch (const std::exception& e) {
+        LOG_WARNING("Failed to migrate cache files: " + std::string(e.what()));
+    }
 }
 
 void Editor::shutdownLsp() {
@@ -308,11 +348,21 @@ void Editor::updateLspDocument() {
             return;
         }
         
-        // 延迟初始化：如果客户端还未初始化，跳过本次更新
-        // 初始化应该在后台异步进行，不阻塞文件打开
+        // 延迟初始化：如果客户端还未初始化，异步初始化但不阻塞文件打开
         if (!client->isConnected()) {
-            // 不在这里初始化，避免阻塞文件打开
-            // 初始化将在后台异步进行，或者用户首次触发补全时进行
+            // 在后台线程中初始化，避免阻塞文件打开
+            std::thread([client, filepath, this]() {
+                try {
+                    std::string root_path = fs::current_path().string();
+                    client->initialize(root_path);
+                    // 初始化完成后，清理可能新创建的缓存文件
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // 等待索引创建完成
+                    cleanupLocalCacheFiles();
+                } catch (...) {
+                    // 初始化失败，静默处理
+                }
+            }).detach();
+            // 不在这里等待初始化完成，继续处理文档
             return;
         }
     

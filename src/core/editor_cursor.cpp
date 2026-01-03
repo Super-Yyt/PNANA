@@ -442,6 +442,18 @@ void Editor::adjustViewOffset() {
     }
 }
 
+void Editor::pageUp() {
+    if (file_browser_.isVisible()) {
+        file_browser_.selectPageUp();
+    }
+}
+
+void Editor::pageDown() {
+    if (file_browser_.isVisible()) {
+        file_browser_.selectPageDown();
+    }
+}
+
 } // namespace core
 } // namespace pnana
 

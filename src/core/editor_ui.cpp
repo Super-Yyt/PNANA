@@ -1,6 +1,7 @@
 // UI渲染相关实现
 #include "core/editor.h"
 #include "core/ui/ui_router.h"
+#include "ui/statusbar.h"
 #include "ui/icons.h"
 #include "ui/terminal_ui.h"
 #include "ui/welcome_screen.h"
@@ -10,13 +11,68 @@
 #include "ui/save_as_dialog.h"
 #include "ui/cursor_config_dialog.h"
 #include "ui/binary_file_view.h"
+#ifdef BUILD_IMAGE_PREVIEW_SUPPORT
 #include "features/image_preview.h"
+#endif
 #include "utils/logger.h"
+
+using namespace pnana::ui::icons;
+
+// 获取git信息（异步缓存以提高性能）
+static std::string cached_git_branch;
+static int cached_git_uncommitted_count = -1;
+static std::chrono::steady_clock::time_point last_git_check;
+static const auto GIT_CACHE_DURATION = std::chrono::seconds(30); // 30秒缓存，减少频繁调用
+static std::mutex git_cache_mutex;
+static std::atomic<bool> git_update_in_progress(false);
+
+static void updateGitInfoAsync() {
+    // 如果正在更新中，直接返回
+    if (git_update_in_progress.load()) {
+        return;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    if (cached_git_uncommitted_count != -1 &&
+        (now - last_git_check) <= GIT_CACHE_DURATION) {
+        return; // 缓存仍然有效
+    }
+
+    // 标记开始更新
+    git_update_in_progress.store(true);
+
+    // 在后台线程中执行git命令
+    std::thread([]() {
+        try {
+            auto [branch, count] = pnana::ui::Statusbar::getGitInfo();
+
+            // 使用互斥锁保护共享数据
+            std::lock_guard<std::mutex> lock(git_cache_mutex);
+            cached_git_branch = branch;
+            cached_git_uncommitted_count = count;
+            last_git_check = std::chrono::steady_clock::now();
+        } catch (...) {
+            // 静默处理错误
+        }
+
+        // 标记更新完成
+        git_update_in_progress.store(false);
+    }).detach(); // 分离线程，让它在后台运行
+}
+
+static void updateGitInfo() {
+    // 异步更新git信息（非阻塞）
+    updateGitInfoAsync();
+}
 #include <ftxui/dom/elements.hpp>
 #include <sstream>
 #include <map>
 #include <algorithm>
 #include <climits>
+#include <chrono>
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include <chrono>
 
 using namespace ftxui;
@@ -256,6 +312,7 @@ Element Editor::renderEditor() {
     // 单视图渲染（没有分屏）
     Document* doc = getCurrentDocument();
     
+#ifdef BUILD_IMAGE_PREVIEW_SUPPORT
     // 检查文件浏览器中是否选中了图片文件
     if (file_browser_.isVisible()) {
         std::string selected_path = file_browser_.getSelectedPath();
@@ -305,7 +362,7 @@ Element Editor::renderEditor() {
                 // 添加图片信息
                 preview_lines.push_back(
                     hbox({
-                        text("🖼️  Image Preview: ") | color(colors.function) | bold,
+                        text(std::string(IMAGE) + " Image Preview: ") | color(colors.function) | bold,
                         text(image_preview_.getImagePath()) | color(colors.foreground)
                     })
                 );
@@ -350,6 +407,7 @@ Element Editor::renderEditor() {
             }
         }
     }
+#endif
     
     // 如果没有文档，显示欢迎界面
     if (!doc) {
@@ -1088,6 +1146,18 @@ Element Editor::renderLineNumber(size_t line_num, bool is_current) {
 }
 
 Element Editor::renderStatusbar() {
+    // 异步更新git信息（非阻塞）
+    updateGitInfo();
+
+    // 获取git信息（线程安全）
+    std::string git_branch;
+    int git_uncommitted_count;
+    {
+        std::lock_guard<std::mutex> lock(git_cache_mutex);
+        git_branch = cached_git_branch;
+        git_uncommitted_count = cached_git_uncommitted_count;
+    }
+
     // If no document, show welcome status
     if (getCurrentDocument() == nullptr) {
         return statusbar_.render(
@@ -1104,7 +1174,9 @@ Element Editor::renderStatusbar() {
             region_manager_.getRegionName(),
             false,  // syntax highlighting
             false,  // has selection
-            0       // selection length
+            0,      // selection length
+            git_branch,
+            git_uncommitted_count
         );
     }
     
@@ -1136,8 +1208,10 @@ Element Editor::renderStatusbar() {
         region_manager_.getRegionName(),
         syntax_highlighting_,
         selection_active_,
-        selection_active_ ? 
-            (cursor_row_ != selection_start_row_ || cursor_col_ != selection_start_col_ ? 1 : 0) : 0
+        selection_active_ ?
+            (cursor_row_ != selection_start_row_ || cursor_col_ != selection_start_col_ ? 1 : 0) : 0,
+        git_branch,
+        git_uncommitted_count
     );
 }
 
