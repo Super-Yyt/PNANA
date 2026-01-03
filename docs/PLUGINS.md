@@ -74,27 +74,6 @@ pnana 的 LSP 支持提供以下功能：
 
 pnana 会自动检测系统中已安装的 LSP 服务器，无需手动配置即可使用。
 
-#### 手动配置
-
-如果需要自定义 LSP 服务器配置，可以在配置文件中设置：
-
-```json
-{
-  "lsp": {
-    "servers": {
-      "python": {
-        "command": "pylsp",
-        "args": ["--stdio"]
-      },
-      "cpp": {
-        "command": "clangd",
-        "args": []
-      }
-    }
-  }
-}
-```
-
 #### 安装 LSP 服务器
 
 **Python (pylsp)**:
