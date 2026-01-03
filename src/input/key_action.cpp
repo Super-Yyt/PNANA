@@ -93,6 +93,10 @@ static void initializeActionInfos() {
         "goto_line_start", "Go to line start", std::vector<std::string>{"home"});
     action_infos_.emplace_back(KeyAction::GOTO_LINE_END, ActionGroup::SEARCH_NAV,
         "goto_line_end", "Go to line end", std::vector<std::string>{"end"});
+    action_infos_.emplace_back(KeyAction::PAGE_UP, ActionGroup::SEARCH_NAV,
+        "page_up", "Page up", std::vector<std::string>{"pageup"});
+    action_infos_.emplace_back(KeyAction::PAGE_DOWN, ActionGroup::SEARCH_NAV,
+        "page_down", "Page down", std::vector<std::string>{"pagedown"});
     
     // 视图操作
     action_infos_.emplace_back(KeyAction::TOGGLE_THEME_MENU, ActionGroup::VIEW_OPS,

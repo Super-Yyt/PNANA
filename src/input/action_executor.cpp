@@ -232,6 +232,22 @@ bool ActionExecutor::executeSearchNavigation(KeyAction action) {
         case KeyAction::GOTO_LINE_END:
             editor_->moveCursorLineEnd();
             return true;
+        case KeyAction::PAGE_UP:
+            if (editor_->isFileBrowserVisible()) {
+                editor_->pageUp();
+                return true;
+            }
+            // 如果文件浏览器不可见，则执行普通的光标翻页
+            editor_->moveCursorPageUp();
+            return true;
+        case KeyAction::PAGE_DOWN:
+            if (editor_->isFileBrowserVisible()) {
+                editor_->pageDown();
+                return true;
+            }
+            // 如果文件浏览器不可见，则执行普通的光标翻页
+            editor_->moveCursorPageDown();
+            return true;
         default:
             return false;
     }

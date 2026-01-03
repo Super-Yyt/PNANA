@@ -51,6 +51,8 @@ enum class KeyAction {
     GOTO_FILE_END,
     GOTO_LINE_START,
     GOTO_LINE_END,
+    PAGE_UP,
+    PAGE_DOWN,
     
     // 视图操作
     TOGGLE_THEME_MENU,

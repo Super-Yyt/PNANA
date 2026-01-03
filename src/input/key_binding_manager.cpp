@@ -66,6 +66,8 @@ void KeyBindingManager::initializeSearchNavigationBindings() {
     bindKey("ctrl_end", KeyAction::GOTO_FILE_END);
     bindKey("home", KeyAction::GOTO_LINE_START);
     bindKey("end", KeyAction::GOTO_LINE_END);
+    bindKey("pageup", KeyAction::PAGE_UP);
+    bindKey("pagedown", KeyAction::PAGE_DOWN);
 }
 
 void KeyBindingManager::initializeViewOperationBindings() {
@@ -77,9 +79,9 @@ void KeyBindingManager::initializeViewOperationBindings() {
 #ifdef BUILD_LUA_SUPPORT
     bindKey("alt_p", KeyAction::OPEN_PLUGIN_MANAGER);
 #endif
-    // Ctrl+L 现在只在文件浏览器中处理，不在这里绑定
+    // Ctrl+L ???????????????????
     
-    // 分屏导航（使用 Ctrl+方向键，类似 tmux）
+    // ??????? Ctrl+?????? tmux?
     bindKey("ctrl_left", KeyAction::FOCUS_LEFT_REGION);
     bindKey("ctrl_right", KeyAction::FOCUS_RIGHT_REGION);
     bindKey("ctrl_up", KeyAction::FOCUS_UP_REGION);
@@ -96,13 +98,13 @@ void KeyBindingManager::initializeTabOperationBindings() {
 KeyAction KeyBindingManager::getAction(const ftxui::Event& event) const {
     std::string key = parser_.eventToKey(event);
     
-    // 调试信息：检查 Ctrl+P 事件
+    // ??????? Ctrl+P ??
     if (event == ftxui::Event::CtrlP) {
         LOG("[DEBUG COPY] KeyBindingManager::getAction() - Ctrl+P detected");
         LOG("[DEBUG COPY] eventToKey() returned: '" + key + "'");
     }
     
-    // 添加调试日志（仅对 Tab 键）
+    // ????????? Tab ??
     if (event == ftxui::Event::Tab) {
         LOG("KeyBindingManager::getAction() - Tab key detected");
         LOG("eventToKey() returned: '" + key + "'");
@@ -115,7 +117,7 @@ KeyAction KeyBindingManager::getAction(const ftxui::Event& event) const {
             } else {
                 LOG_ERROR("Key '" + key + "' not found in key_to_action_ map!");
                 LOG_ERROR("Total keys in map: " + std::to_string(key_to_action_.size()));
-                // 检查 "tab" 键是否存在
+                // ?? "tab" ?????
                 LOG("Checking if 'tab' key exists in map...");
                 int tab_count = 0;
                 for (const auto& pair : key_to_action_) {
@@ -150,7 +152,7 @@ KeyAction KeyBindingManager::getAction(const ftxui::Event& event) const {
     if (event == ftxui::Event::CtrlP) {
         LOG_ERROR("[DEBUG COPY] Key '" + key + "' not found in key_to_action_ map!");
         LOG_ERROR("[DEBUG COPY] Total keys in map: " + std::to_string(key_to_action_.size()));
-        // 检查 "ctrl_p" 键是否存在
+        // ?? "ctrl_p" ?????
         int ctrl_p_count = 0;
         for (const auto& pair : key_to_action_) {
             if (pair.first == "ctrl_p") {
@@ -170,7 +172,7 @@ KeyAction KeyBindingManager::getAction(const ftxui::Event& event) const {
 void KeyBindingManager::bindKey(const std::string& key, KeyAction action) {
     key_to_action_[key] = action;
     
-    // 更新反向映射
+    // ??????
     auto& keys = action_to_keys_[action];
     if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
         keys.push_back(key);
@@ -189,7 +191,7 @@ void KeyBindingManager::unbindKey(const std::string& key) {
         KeyAction action = it->second;
         key_to_action_.erase(it);
         
-        // 从反向映射中移除
+        // ????????
         auto& keys = action_to_keys_[action];
         keys.erase(std::remove(keys.begin(), keys.end(), key), keys.end());
     }
