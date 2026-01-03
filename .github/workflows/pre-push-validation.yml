@@ -38,14 +38,16 @@ jobs:
     - name: Build and install FTXUI
       run: |
         echo "Building FTXUI from source..."
+        sudo apt-get install -y libncurses-dev
         git clone https://github.com/ArthurSonzogni/FTXUI.git
         cd FTXUI
         mkdir build && cd build
-        cmake .. -DCMAKE_BUILD_TYPE=Release
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17
         make -j$(nproc)
         sudo make install
         cd ../..
         rm -rf FTXUI
+        echo "FTXUI installation completed"
 
     - name: Validate compilation
       run: |
@@ -85,6 +87,7 @@ jobs:
           const repository = process.env.GITHUB_REPOSITORY || 'unknown';
 
           const title = `🚨 Build Failed: ${shortSha}`;
+          const logsUrl = `https://github.com/${repository}/actions/runs/${runId}`;
           const body = `
           ## Build Validation Failed
 
@@ -123,7 +126,7 @@ jobs:
               title: title,
               body: body + `
 
-[View Build Logs](https://github.com/${repository}/actions/runs/${runId})`,
+[View Build Logs](${logsUrl})`,
               labels: ['build-failure', 'automated', 'high-priority']
             });
           }
