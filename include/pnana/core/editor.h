@@ -32,7 +32,9 @@
 #endif
 #include "features/search.h"
 #include "features/file_browser.h"
+#ifdef BUILD_IMAGE_PREVIEW_SUPPORT
 #include "features/image_preview.h"
+#endif
 #include "features/SyntaxHighlighter/syntax_highlighter.h"
 #include "features/command_palette.h"
 #include "features/terminal.h"
@@ -118,6 +120,10 @@ public:
     void moveCursorFileEnd();
     void moveCursorWordForward();
     void moveCursorWordBackward();
+
+    // 文件浏览器导航
+    void pageUp();      // 文件浏览器向上翻页
+    void pageDown();    // 文件浏览器向下翻页
     
     // 编辑操作
     void insertChar(char ch);
@@ -254,7 +260,9 @@ private:
     // 功能模块
     features::SearchEngine search_engine_;
     features::FileBrowser file_browser_;
+#ifdef BUILD_IMAGE_PREVIEW_SUPPORT
     features::ImagePreview image_preview_;
+#endif
     features::SyntaxHighlighter syntax_highlighter_;
     features::CommandPalette command_palette_;
     features::Terminal terminal_;
@@ -444,6 +452,7 @@ private:
     // LSP 相关方法
     void initializeLsp();
     void shutdownLsp();
+    void cleanupLocalCacheFiles();
     std::string detectLanguageId(const std::string& filepath);
     std::string filepathToUri(const std::string& filepath);
     void triggerCompletion();
