@@ -177,6 +177,14 @@ std::string FileTypeDetector::detectFileType(const std::string& filename,
     if (ext_lower == "nim" || ext_lower == "nims" || ext_lower == "nimble")
         return "nim";
 
+    // Meson
+    if (filename_lower == "meson.build" || filename_lower == "meson_options.txt")
+        return "meson";
+
+    // TOML
+    if (ext_lower == "toml")
+        return "toml";
+
     // Crystal
     if (ext_lower == "cr")
         return "crystal";
@@ -415,6 +423,115 @@ std::string FileTypeDetector::detectFileType(const std::string& filename,
         return "qlang";
 
     return "text";
+}
+
+// 获取完整的文件类型信息（用于图标显示）
+std::string FileTypeDetector::getFileTypeForIcon(const std::string& filename,
+                                                 const std::string& extension) {
+    // 先检测文件类型
+    std::string file_type = detectFileType(filename, extension);
+
+    // 对于特殊文件名，返回特定的类型字符串用于图标匹配
+    std::string filename_lower = filename;
+    std::transform(filename_lower.begin(), filename_lower.end(), filename_lower.begin(), ::tolower);
+
+    if (filename_lower == "cargo.toml") {
+        return "cargo.toml";
+    }
+    if (filename_lower == "cargo.lock") {
+        return "cargo.lock";
+    }
+    if (filename_lower == "gemfile") {
+        return "gemfile";
+    }
+    if (filename_lower == "composer.json") {
+        return "composer.json";
+    }
+    if (filename_lower == "go.mod") {
+        return "go.mod";
+    }
+    if (filename_lower == "go.sum") {
+        return "go.sum";
+    }
+    if (filename_lower == "requirements.txt") {
+        return "requirements.txt";
+    }
+    if (filename_lower == "pyproject.toml") {
+        return "pyproject.toml";
+    }
+    if (filename_lower == "meson.build") {
+        return "meson.build";
+    }
+    if (filename_lower.find("docker-compose") != std::string::npos) {
+        return "docker-compose.yml";
+    }
+    if (filename_lower == "dockerfile") {
+        return "dockerfile";
+    }
+    if (filename_lower.find("readme") != std::string::npos) {
+        return "readme";
+    }
+    if (filename_lower.find("license") != std::string::npos) {
+        return "license";
+    }
+    if (filename_lower.find("changelog") != std::string::npos) {
+        return "changelog";
+    }
+
+    // 对于图片文件，使用扩展名
+    std::string ext_lower = extension;
+    std::transform(ext_lower.begin(), ext_lower.end(), ext_lower.begin(), ::tolower);
+
+    if (ext_lower == "jpg" || ext_lower == "jpeg" || ext_lower == "png" || ext_lower == "gif" ||
+        ext_lower == "bmp" || ext_lower == "webp") {
+        return ext_lower;
+    }
+
+    // 对于视频文件
+    if (ext_lower == "mp4" || ext_lower == "avi" || ext_lower == "mkv" || ext_lower == "mov" ||
+        ext_lower == "wmv") {
+        return ext_lower;
+    }
+
+    // 对于音频文件
+    if (ext_lower == "mp3" || ext_lower == "wav" || ext_lower == "flac" || ext_lower == "aac" ||
+        ext_lower == "ogg") {
+        return ext_lower;
+    }
+
+    // 对于压缩文件
+    if (ext_lower == "zip" || ext_lower == "tar" || ext_lower == "gz" || ext_lower == "rar" ||
+        ext_lower == "7z") {
+        return ext_lower;
+    }
+
+    // 对于数据库文件
+    if (ext_lower == "db" || ext_lower == "sqlite") {
+        return ext_lower;
+    }
+
+    // 对于可执行文件
+    if (ext_lower == "exe" || ext_lower == "bin" || ext_lower == "out") {
+        return ext_lower;
+    }
+
+    // 对于配置文件
+    if (ext_lower == "config" || ext_lower == "conf" || ext_lower == "ini") {
+        return ext_lower;
+    }
+
+    // 对于日志文件
+    if (ext_lower == "log") {
+        return ext_lower;
+    }
+
+    // 对于数据文件
+    if (ext_lower == "csv" || ext_lower == "tsv") {
+        return ext_lower;
+    }
+
+    // 返回标准文件类型
+    return file_type;
 }
 
 } // namespace utils
