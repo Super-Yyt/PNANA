@@ -1,5 +1,6 @@
 #include "ui/tabbar.h"
 #include "ui/icons.h"
+#include "utils/file_type_detector.h"
 
 using namespace ftxui;
 
@@ -73,55 +74,11 @@ Element Tabbar::renderTab(const core::DocumentManager::TabInfo& tab, size_t /*in
 std::string Tabbar::getFileIcon(const std::string& filename) const {
     std::string ext = getFileExtension(filename);
 
-    // 使用Nerd Font图标
-    if (ext == "cpp" || ext == "cc" || ext == "cxx")
-        return "";
-    if (ext == "h" || ext == "hpp" || ext == "hxx")
-        return "";
-    if (ext == "c")
-        return "";
-    if (ext == "py")
-        return "";
-    if (ext == "js")
-        return "";
-    if (ext == "ts")
-        return "";
-    if (ext == "java")
-        return "";
-    if (ext == "go")
-        return "";
-    if (ext == "rs")
-        return "";
-    if (ext == "rb")
-        return "";
-    if (ext == "php")
-        return "";
-    if (ext == "html")
-        return "";
-    if (ext == "css")
-        return "";
-    if (ext == "json")
-        return "";
-    if (ext == "xml")
-        return "";
-    if (ext == "md")
-        return "";
-    if (ext == "txt")
-        return "";
-    if (ext == "pdf")
-        return "";
-    if (ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "gif")
-        return "";
-    if (ext == "zip" || ext == "tar" || ext == "gz")
-        return "";
-    if (ext == "sh")
-        return "";
-    if (ext == "yml" || ext == "yaml")
-        return "";
-    if (ext == "sql")
-        return "";
+    // 使用文件类型检测器获取完整的文件类型信息
+    std::string file_type = utils::FileTypeDetector::getFileTypeForIcon(filename, ext);
 
-    return ""; // 默认文件图标
+    // 使用图标映射函数获取对应的图标
+    return ui::icons::getFileTypeIcon(file_type);
 }
 
 std::string Tabbar::getFileExtension(const std::string& filename) const {

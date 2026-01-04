@@ -56,12 +56,11 @@ Element SaveAsDialog::render() {
 
     dialog_content.push_back(text(""));
 
-    // 输入框 - 使用更醒目的样式突出显示输入区域
+    // 输入框 - 使用与file_picker一致的光标样式
     std::string input_display = input_.empty() ? "_" : input_ + "_";
     dialog_content.push_back(hbox(
         {text("  "), text(is_untitled ? "File name: " : "File path: ") | color(colors.foreground),
-         text(" "),
-         text(input_display) | bold | color(colors.background) | bgcolor(colors.selection)}));
+         text(" "), text(input_display) | color(colors.foreground) | bgcolor(colors.selection)}));
 
     dialog_content.push_back(text(""));
     dialog_content.push_back(separator());

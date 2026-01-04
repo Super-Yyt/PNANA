@@ -72,8 +72,9 @@ bool FilePicker::handleInput(ftxui::Event event) {
             return true;
         } else if (event.is_character()) {
             std::string ch = event.character();
-            if (ch.length() == 1 && ch[0] >= 32 && ch[0] < 127) {
-                path_input_ += ch[0];
+            // 支持完整的UTF-8字符输入，包括中文等多字节字符
+            if (!ch.empty() && ch[0] >= 32) { // 过滤控制字符
+                path_input_ += ch;
                 updatePathFromInput(); // 实时更新路径
             }
             return true;
@@ -100,8 +101,9 @@ bool FilePicker::handleInput(ftxui::Event event) {
             return true;
         } else if (event.is_character()) {
             std::string ch = event.character();
-            if (ch.length() == 1 && ch[0] >= 32 && ch[0] < 127) {
-                filter_input_ += ch[0];
+            // 支持完整的UTF-8字符输入，包括中文等多字节字符
+            if (!ch.empty() && ch[0] >= 32) { // 过滤控制字符
+                filter_input_ += ch;
                 loadDirectory();
             }
             return true;

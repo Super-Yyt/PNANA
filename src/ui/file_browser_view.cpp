@@ -10,7 +10,34 @@ using namespace ftxui;
 namespace pnana {
 namespace ui {
 
-FileBrowserView::FileBrowserView(Theme& theme) : theme_(theme) {}
+FileBrowserView::FileBrowserView(Theme& theme) : theme_(theme), scroll_offset_(0) {}
+
+// 滚动控制方法
+void FileBrowserView::scrollTo(size_t index) {
+    scroll_offset_ = index;
+}
+
+void FileBrowserView::scrollUp(size_t lines) {
+    if (scroll_offset_ >= lines) {
+        scroll_offset_ -= lines;
+    } else {
+        scroll_offset_ = 0;
+    }
+}
+
+void FileBrowserView::scrollDown(size_t lines) {
+    scroll_offset_ += lines;
+}
+
+void FileBrowserView::scrollToTop() {
+    scroll_offset_ = 0;
+}
+
+void FileBrowserView::scrollToBottom() {
+    // 这个方法需要在渲染时根据实际项目数量来设置
+    // 这里先设置一个大的值，在渲染时会调整
+    scroll_offset_ = SIZE_MAX / 2; // 很大的值
+}
 
 Element FileBrowserView::render(const features::FileBrowser& browser, int height) {
     auto& colors = theme_.getColors();
@@ -22,48 +49,75 @@ Element FileBrowserView::render(const features::FileBrowser& browser, int height
     content.push_back(separator());
 
     // 文件列表
-    size_t total_items = browser.getFlatItems().size();
+    const auto& flat_items = browser.getFlatItems();
+    size_t total_items = flat_items.size();
+    size_t selected_index = browser.getSelectedIndex();
 
     // 计算可用高度：总高度 - 标题(1) - 分隔符(1) - 底部分隔符(1) - 状态栏(1) = height - 4
     size_t available_height = static_cast<size_t>(height - 4);
-    size_t visible_start = 0;
-    size_t visible_count = available_height; // 使用所有可用高度
 
-    // 调整滚动位置
-    size_t selected_index = browser.getSelectedIndex();
+    // 根据选中项目调整滚动位置，确保选中项目可见
+    // 使用更智能的滚动策略：保持选中项目在中间偏上位置
+    size_t target_scroll = scroll_offset_;
 
-    if (selected_index >= visible_start + visible_count && total_items > visible_count) {
-        visible_start = selected_index - visible_count + 1;
+    if (selected_index < scroll_offset_) {
+        // 选中项目在可见区域上方
+        // 将选中项目放在可见区域的中间位置
+        size_t ideal_position = available_height / 3; // 选中项目在1/3位置
+        if (selected_index >= ideal_position) {
+            target_scroll = selected_index - ideal_position;
+        } else {
+            target_scroll = 0;
+        }
+    } else if (selected_index >= scroll_offset_ + available_height) {
+        // 选中项目在可见区域下方
+        // 将选中项目放在可见区域的中间位置
+        size_t ideal_position = available_height / 3; // 选中项目在1/3位置
+        target_scroll = selected_index - ideal_position;
+    } else {
+        // 选中项目已在可见范围内，检查是否需要微调以获得更好的视觉体验
+        size_t relative_pos = selected_index - scroll_offset_;
+        if (relative_pos == 0 && scroll_offset_ > 0) {
+            // 选中项目在顶部，稍微向上滚动以获得上下文
+            target_scroll = scroll_offset_ - 1;
+        } else if (relative_pos == available_height - 1 &&
+                   scroll_offset_ + available_height < total_items) {
+            // 选中项目在底部，稍微向下滚动以获得上下文
+            target_scroll = scroll_offset_ + 1;
+        }
     }
-    if (selected_index < visible_start) {
-        visible_start = selected_index;
+
+    // 确保滚动偏移量不超出有效范围
+    if (target_scroll >= total_items) {
+        target_scroll = (total_items > available_height) ? total_items - available_height : 0;
+    }
+    if (target_scroll > selected_index) {
+        target_scroll = selected_index;
     }
 
-    // 渲染文件列表 - 直接获取文件项元素，而不是嵌套的 vbox
+    scroll_offset_ = target_scroll;
+
+    // 计算实际可见范围
+    size_t visible_start = scroll_offset_;
+    size_t visible_end = std::min(scroll_offset_ + available_height, total_items);
+
+    // 渲染文件列表 - 只渲染可见的项目
     Elements file_list_elements;
-    const auto& flat_items = browser.getFlatItems();
 
-    size_t rendered_items = 0;
-    for (size_t i = visible_start; i < flat_items.size() && i < visible_start + visible_count;
-         ++i) {
+    for (size_t i = visible_start; i < visible_end; ++i) {
         const features::FileItem* item = flat_items[i];
         if (item) {
             file_list_elements.push_back(renderFileItem(item, i, selected_index, flat_items));
-            rendered_items++;
         }
     }
 
     // 如果文件项数少于可用高度，填充空行
-    if (rendered_items < available_height) {
-        for (size_t i = rendered_items; i < available_height; ++i) {
-            file_list_elements.push_back(text(""));
-        }
+    while (file_list_elements.size() < available_height) {
+        file_list_elements.push_back(text(""));
     }
 
     // 将文件列表添加到内容中
-    if (!file_list_elements.empty()) {
-        content.push_back(vbox(file_list_elements));
-    }
+    content.push_back(vbox(file_list_elements));
 
     // 底部状态栏
     content.push_back(separator());

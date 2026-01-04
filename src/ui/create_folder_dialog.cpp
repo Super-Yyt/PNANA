@@ -41,12 +41,11 @@ Element CreateFolderDialog::render() {
 
     dialog_content.push_back(text(""));
 
-    // 输入框 - 使用更醒目的样式突出显示输入区域
+    // 输入框 - 使用与file_picker一致的光标样式
     std::string folder_input_display = input_.empty() ? "_" : input_ + "_";
     dialog_content.push_back(
         hbox({text("  "), text("Folder name: ") | color(colors.foreground), text(" "),
-              text(folder_input_display) | bold | color(colors.background) |
-                  bgcolor(colors.selection)}));
+              text(folder_input_display) | color(colors.foreground) | bgcolor(colors.selection)}));
 
     dialog_content.push_back(text(""));
     dialog_content.push_back(separator());
