@@ -59,7 +59,7 @@ jobs:
         cp README.md CHANGELOG.md docs/build/ 2>/dev/null || echo "Some docs not found, skipping"
 
     - name: Deploy to GitHub Pages
-      if: github.ref == 'refs/heads/master'
+      if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/fix/ci-actions'
       uses: peaceiris/actions-gh-pages@v3
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
