@@ -5,6 +5,7 @@
 #endif
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 
 using namespace ftxui;
 
