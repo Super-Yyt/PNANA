@@ -1,0 +1,4 @@
+option('buildtype', type : 'combo', choices : ['plain', 'debug', 'debugoptimized', 'release', 'minsize'], value : 'debug')
+option('optimization', type : 'combo', choices : ['0', 'g', '1', '2', '3', 's'], value : '0')
+option('debug', type : 'boolean', value : true)
+option('warning_level', type : 'integer', min : 0, max : 3, value : 1)
