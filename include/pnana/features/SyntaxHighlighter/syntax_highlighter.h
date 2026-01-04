@@ -143,6 +143,9 @@ class SyntaxHighlighter {
     std::vector<Token> tokenizeJulia(const std::string& line);
     std::vector<Token> tokenizeDart(const std::string& line);
     std::vector<Token> tokenizeNim(const std::string& line);
+    std::vector<Token> tokenizeMeson(const std::string& line);
+    std::vector<Token> tokenizeTOML(const std::string& line);
+    std::vector<Token> tokenizeHTML(const std::string& line);
     std::vector<Token> tokenizeCrystal(const std::string& line);
     std::vector<Token> tokenizeZig(const std::string& line);
     std::vector<Token> tokenizeOCaml(const std::string& line);
