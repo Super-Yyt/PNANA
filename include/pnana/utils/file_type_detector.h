@@ -11,6 +11,10 @@ class FileTypeDetector {
   public:
     // 根据文件名和扩展名检测文件类型
     static std::string detectFileType(const std::string& filename, const std::string& extension);
+
+    // 获取用于图标显示的文件类型信息
+    static std::string getFileTypeForIcon(const std::string& filename,
+                                          const std::string& extension);
 };
 
 } // namespace utils
