@@ -607,6 +607,60 @@ Element Editor::renderEditorRegion(const features::ViewRegion& region, Document*
     return vbox(lines);
 }
 
+// 获取UTF-8字符的辅助函数
+std::string getUtf8CharAt(const std::string& str, size_t pos) {
+    if (pos >= str.length()) {
+        return " ";
+    }
+
+    unsigned char first_byte = static_cast<unsigned char>(str[pos]);
+
+    // 单字节ASCII字符
+    if ((first_byte & 0x80) == 0) {
+        return str.substr(pos, 1);
+    }
+
+    // 多字节UTF-8字符
+    int bytes_needed;
+    if ((first_byte & 0xE0) == 0xC0) {
+        bytes_needed = 2;
+    } else if ((first_byte & 0xF0) == 0xE0) {
+        bytes_needed = 3;
+    } else if ((first_byte & 0xF8) == 0xF0) {
+        bytes_needed = 4;
+    } else {
+        // 无效的UTF-8，退回到单字节
+        return str.substr(pos, 1);
+    }
+
+    // 确保有足够的字节
+    if (pos + bytes_needed > str.length()) {
+        return str.substr(pos, 1);
+    }
+
+    return str.substr(pos, bytes_needed);
+}
+
+// 检查字符是否为中文字符（保留用于可能的未来功能）
+bool isChineseChar(const std::string& ch) {
+    if (ch.length() < 3) {
+        return false;
+    }
+
+    // 中文UTF-8范围：E4-B8-80 到 E9-BF-BF (基本汉字)
+    if (ch.length() == 3) {
+        unsigned char b1 = static_cast<unsigned char>(ch[0]);
+        unsigned char b2 = static_cast<unsigned char>(ch[1]);
+        unsigned char b3 = static_cast<unsigned char>(ch[2]);
+
+        // 基本检查：是否为3字节UTF-8且在中文范围内
+        return (b1 >= 0xE4 && b1 <= 0xE9) && (b2 >= 0x80 && b2 <= 0xBF) &&
+               (b3 >= 0x80 && b3 <= 0xBF);
+    }
+
+    return false;
+}
+
 // 渲染光标元素的辅助函数
 Element Editor::renderCursorElement(const std::string& cursor_char, size_t cursor_pos,
                                     size_t line_length) const {
@@ -614,7 +668,7 @@ Element Editor::renderCursorElement(const std::string& cursor_char, size_t curso
     ::pnana::ui::CursorStyle style = getCursorStyle();
     ftxui::Color cursor_color = getCursorColor();
     bool smooth = getCursorSmooth();
-
+    // Nano风格：所有字符使用相同的光标样式，不区分中文和其他字符
     // 根据样式渲染光标
     Element cursor_elem;
 
@@ -817,9 +871,10 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                         // 光标在选中前的部分
                         size_t before_cursor = cursor_pos - pos;
                         std::string before = before_selection.substr(0, before_cursor);
-                        std::string cursor_char = before_cursor < before_selection.length()
-                                                      ? before_selection.substr(before_cursor, 1)
-                                                      : " ";
+                        std::string cursor_char =
+                            before_cursor < before_selection.length()
+                                ? getUtf8CharAt(before_selection, before_cursor)
+                                : " ";
                         std::string after = before_cursor < before_selection.length()
                                                 ? before_selection.substr(before_cursor + 1)
                                                 : "";
@@ -845,7 +900,7 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                         size_t before_cursor = cursor_pos - pos;
                         std::string before = selected.substr(0, before_cursor);
                         std::string cursor_char = before_cursor < selected.length()
-                                                      ? selected.substr(before_cursor, 1)
+                                                      ? getUtf8CharAt(selected, before_cursor)
                                                       : " ";
                         std::string after = before_cursor < selected.length()
                                                 ? selected.substr(before_cursor + 1)
@@ -876,9 +931,10 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                         // 光标在选中后的部分
                         size_t before_cursor = cursor_pos - pos;
                         std::string before = after_selection.substr(0, before_cursor);
-                        std::string cursor_char = before_cursor < after_selection.length()
-                                                      ? after_selection.substr(before_cursor, 1)
-                                                      : " ";
+                        std::string cursor_char =
+                            before_cursor < after_selection.length()
+                                ? getUtf8CharAt(after_selection, before_cursor)
+                                : " ";
                         std::string after = before_cursor < after_selection.length()
                                                 ? after_selection.substr(before_cursor + 1)
                                                 : "";
@@ -901,8 +957,9 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
             // 没有搜索匹配和选中，正常渲染
             if (has_cursor && cursor_pos <= line_content.length()) {
                 std::string before = line_content.substr(0, cursor_pos);
-                std::string cursor_char =
-                    cursor_pos < line_content.length() ? line_content.substr(cursor_pos, 1) : " ";
+                std::string cursor_char = cursor_pos < line_content.length()
+                                              ? getUtf8CharAt(line_content, cursor_pos)
+                                              : " ";
                 std::string after =
                     cursor_pos < line_content.length() ? line_content.substr(cursor_pos + 1) : "";
 
@@ -958,7 +1015,7 @@ Element Editor::renderLine(size_t line_num, bool is_current) {
                             }
 
                             // 光标位置的字符
-                            std::string cursor_char = line_content.substr(cursor_pos, 1);
+                            std::string cursor_char = getUtf8CharAt(line_content, cursor_pos);
                             Element cursor_elem =
                                 renderCursorElement(cursor_char, cursor_pos, line_content.length());
                             // 选中高亮优先于搜索高亮

@@ -1,4 +1,61 @@
 // 光标移动相关实现
+
+#include <cstddef>
+#include <string>
+
+// 获取UTF-8字符的辅助函数
+std::string getUtf8CharAt(const std::string& str, size_t pos) {
+    if (pos >= str.length()) {
+        return " ";
+    }
+
+    unsigned char first_byte = static_cast<unsigned char>(str[pos]);
+
+    // 单字节ASCII字符
+    if ((first_byte & 0x80) == 0) {
+        return str.substr(pos, 1);
+    }
+
+    // 多字节UTF-8字符
+    int bytes_needed;
+    if ((first_byte & 0xE0) == 0xC0) {
+        bytes_needed = 2;
+    } else if ((first_byte & 0xF0) == 0xE0) {
+        bytes_needed = 3;
+    } else if ((first_byte & 0xF8) == 0xF0) {
+        bytes_needed = 4;
+    } else {
+        // 无效的UTF-8，退回到单字节
+        return str.substr(pos, 1);
+    }
+
+    // 确保有足够的字节
+    if (pos + bytes_needed > str.length()) {
+        return str.substr(pos, 1);
+    }
+
+    return str.substr(pos, bytes_needed);
+}
+
+// 检查字符是否为中文字符（保留用于可能的未来功能）
+bool isChineseChar(const std::string& ch) {
+    if (ch.length() < 3) {
+        return false;
+    }
+
+    // 中文UTF-8范围：E4-B8-80 到 E9-BF-BF (基本汉字)
+    if (ch.length() == 3) {
+        unsigned char b1 = static_cast<unsigned char>(ch[0]);
+        unsigned char b2 = static_cast<unsigned char>(ch[1]);
+        unsigned char b3 = static_cast<unsigned char>(ch[2]);
+
+        // 基本检查：是否为3字节UTF-8且在中文范围内
+        return (b1 >= 0xE4 && b1 <= 0xE9) && (b2 >= 0x80 && b2 <= 0xBF) &&
+               (b3 >= 0x80 && b3 <= 0xBF);
+    }
+
+    return false;
+}
 #include "core/editor.h"
 #include "utils/logger.h"
 #include <algorithm>
@@ -41,11 +98,32 @@ void Editor::moveCursorLeft() {
         endSelection();
     }
 
+    Document* doc = getCurrentDocument();
+    if (!doc) {
+        return;
+    }
+
+    const std::string& line = doc->getLine(cursor_row_);
+
     if (cursor_col_ > 0) {
-        cursor_col_--;
+        // Nano风格：向左移动到前一个字符的起始位置
+        // 从当前位置向前查找UTF-8字符的起始位置
+        size_t new_pos = cursor_col_ - 1;
+
+        // 如果当前位置不是UTF-8字符的起始，找到前一个字符的起始
+        while (new_pos > 0) {
+            unsigned char byte = static_cast<unsigned char>(line[new_pos]);
+            // 检查是否为UTF-8字符的起始字节
+            if ((byte & 0xC0) != 0x80) { // 不是延续字节
+                break;
+            }
+            new_pos--;
+        }
+
+        cursor_col_ = new_pos;
     } else if (cursor_row_ > 0) {
         cursor_row_--;
-        cursor_col_ = getCurrentDocument()->getLine(cursor_row_).length();
+        cursor_col_ = doc->getLine(cursor_row_).length();
         adjustCursor();
         // 跨行移动时调整视图
         adjustViewOffset();
@@ -58,10 +136,30 @@ void Editor::moveCursorRight() {
         endSelection();
     }
 
-    size_t line_len = getCurrentDocument()->getLine(cursor_row_).length();
+    Document* doc = getCurrentDocument();
+    if (!doc) {
+        return;
+    }
+
+    const std::string& line = doc->getLine(cursor_row_);
+    size_t line_len = line.length();
+
     if (cursor_col_ < line_len) {
-        cursor_col_++;
-    } else if (cursor_row_ < getCurrentDocument()->lineCount() - 1) {
+        // Nano风格：向右移动到下一个字符的起始位置
+        // 从当前位置开始查找下一个UTF-8字符的起始位置
+        size_t new_pos = cursor_col_;
+
+        // 跳过当前字符
+        std::string current_char = getUtf8CharAt(line, new_pos);
+        new_pos += current_char.length();
+
+        // 确保不超过行长度
+        if (new_pos > line_len) {
+            new_pos = line_len;
+        }
+
+        cursor_col_ = new_pos;
+    } else if (cursor_row_ < doc->lineCount() - 1) {
         cursor_row_++;
         cursor_col_ = 0;
         adjustCursor();
@@ -442,6 +540,51 @@ void Editor::adjustViewOffset() {
     if (cursor_col_ > line_len) {
         cursor_col_ = line_len;
     }
+}
+
+// Neovim风格的撤销视图调整：更保守，只在必要时微调
+void Editor::adjustViewOffsetForUndo(size_t target_row, size_t /*target_col*/) {
+    // 撤销操作应该尽量保持用户的视觉上下文，避免剧烈跳跃
+    // 使用更小的scrolloff值，让调整更平滑
+
+    int screen_height = screen_.dimy() - 6;
+    if (screen_height <= 0) {
+        screen_height = 1;
+    }
+
+    Document* doc = getCurrentDocument();
+    if (!doc) {
+        return;
+    }
+
+    size_t total_lines = doc->lineCount();
+    if (total_lines == 0) {
+        view_offset_row_ = 0;
+        return;
+    }
+
+    // 计算目标光标在当前视图中的位置
+    int cursor_screen_pos = static_cast<int>(target_row) - static_cast<int>(view_offset_row_);
+
+    // 撤销操作使用极度保守的策略：
+    // 1. 如果光标已在可见范围内，绝对不调整视图
+    // 2. 只在光标完全不可见时才调整，且调整幅度最小化
+
+    if (cursor_screen_pos < 0) {
+        // 光标在可见区域上方，向上滚动刚好使光标可见
+        // 使用1行buffer，避免紧贴边缘
+        view_offset_row_ = (target_row > 1) ? target_row - 1 : 0;
+    } else if (cursor_screen_pos >= screen_height) {
+        // 光标在可见区域下方，向下滚动刚好使光标可见
+        // 使用1行buffer，避免紧贴边缘
+        size_t max_offset =
+            (total_lines > static_cast<size_t>(screen_height)) ? total_lines - screen_height : 0;
+        view_offset_row_ = target_row + 1 - screen_height;
+        if (view_offset_row_ > max_offset) {
+            view_offset_row_ = max_offset;
+        }
+    }
+    // 如果光标已在可见范围内，完全不调整视图，这是Neovim风格的核心优化
 }
 
 void Editor::pageUp() {

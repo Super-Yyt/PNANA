@@ -18,7 +18,6 @@ void Editor::insertChar(char ch) {
         // 记录变更（阶段2优化：增量更新）
 #ifdef BUILD_LSP_SUPPORT
     if (lsp_enabled_ && document_change_tracker_) {
-        std::string old_text = "";   // 插入操作，旧文本为空
         std::string new_text(1, ch); // 新文本是插入的字符
         document_change_tracker_->recordInsert(static_cast<int>(cursor_row_),
                                                static_cast<int>(cursor_col_), new_text);
@@ -606,27 +605,15 @@ void Editor::undo() {
         // 确保光标位置有效（防止越界）
         adjustCursor();
 
-        // VSCode 风格的视图调整：只在必要时调整，减少屏闪
-        int screen_height = screen_.dimy() - 4;
-        if (screen_height > 0) {
-            // 计算光标在屏幕上的位置
-            int cursor_screen_pos =
-                static_cast<int>(cursor_row_) - static_cast<int>(view_offset_row_);
-
-            // 只在光标完全不可见时才调整视图，减少不必要的视图更新（减少屏闪）
-            if (cursor_screen_pos < 0 || cursor_screen_pos >= screen_height) {
-                // VSCode 行为：将光标行放在屏幕中央
-                view_offset_row_ = (cursor_row_ >= static_cast<size_t>(screen_height / 2))
-                                       ? cursor_row_ - screen_height / 2
-                                       : 0;
-            }
-            // 如果光标在可见范围内，不进行微调，减少视图更新（减少屏闪）
-        }
+        // Neovim风格的视图调整：使用scrolloff机制，平滑调整视图
+        // 撤销操作应该尽量保持用户的视觉上下文，避免剧烈跳跃
+        adjustViewOffsetForUndo(cursor_row_, cursor_col_);
 
         // 清除选择（VSCode 行为：撤销后清除选择）
         selection_active_ = false;
 
-        // VSCode 风格：不显示状态消息，让用户专注于内容变化
+        // 优化：撤销成功时不显示状态消息，避免不必要的UI更新
+        // 只有在撤销失败时才显示消息
     } else {
         setStatusMessage("Nothing to undo");
     }
