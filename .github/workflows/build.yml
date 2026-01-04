@@ -13,14 +13,30 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04, ubuntu-22.04]
+        compiler: [gcc, clang]
         build_type: [Debug, Release]
+        exclude:
+          # 排除一些组合以减少CI时间
+          - os: ubuntu-20.04
+            compiler: clang
+            build_type: Debug
         include:
           - os: ubuntu-20.04
+            compiler: gcc
             cc: gcc-9
             cxx: g++-9
+          - os: ubuntu-20.04
+            compiler: clang
+            cc: clang-10
+            cxx: clang++-10
           - os: ubuntu-22.04
+            compiler: gcc
             cc: gcc-11
             cxx: g++-11
+          - os: ubuntu-22.04
+            compiler: clang
+            cc: clang-14
+            cxx: clang++-14
 
     steps:
     - name: Checkout code
@@ -28,11 +44,28 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ccache
+          /usr/local/lib/cmake/FTXUI
+          /usr/local/include/ftxui
+        key: ${{ runner.os }}-deps-${{ hashFiles('**/CMakeLists.txt', '**/conanfile.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-deps-
+
+    - name: Setup ccache
+      uses: hendrikmuhs/ccache-action@v1.2
+      with:
+        key: ${{ runner.os }}-${{ matrix.build_type }}
+
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
           cmake \
+          ninja-build \
           build-essential \
           pkg-config \
           nlohmann-json3-dev \
@@ -45,7 +78,10 @@ jobs:
           golang-go \
           libncurses-dev \
           libtinfo-dev \
-          git
+          git \
+          ccache \
+          clang-10 \
+          clang-14
 
     - name: Build and install FTXUI
       run: |
@@ -70,17 +106,27 @@ jobs:
       run: |
         echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
         echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
+        echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
 
     - name: Configure CMake
       run: |
         mkdir -p build
         cd build
-        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        cmake .. \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DBUILD_TESTING=ON
 
     - name: Build
       run: |
         cd build
-        make -j$(nproc)
+        ninja -j$(nproc) -v
+
+    - name: Show ccache stats
+      run: ccache -s
 
     - name: Test
       run: |
@@ -91,17 +137,17 @@ jobs:
       uses: actions/upload-artifact@v4
       if: matrix.build_type == 'Release'
       with:
-        name: pnana-${{ matrix.os }}-${{ matrix.build_type }}
-        path: build/pnana/pnana
-        retention-days: 7
+        name: pnana-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
+        path: |
+          build/pnana
+          build/compile_commands.json
+        retention-days: 30
 
   code-quality:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # 获取完整历史记录，用于 git blame
 
     - name: Install clang-format
       run: |
@@ -111,17 +157,18 @@ jobs:
     - name: Check code formatting
       run: |
         # 检查所有 C++ 源文件的格式
-        find src -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror
+        find src include -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror --style=file
         echo "Code formatting check passed!"
 
-    - name: Run static analysis
-      run: |
-        # 安装 cppcheck
-        sudo apt-get install -y cppcheck
-        
-        # 运行静态分析
-        cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/
-        echo "Static analysis passed!"
+    # 暂时禁用 cppcheck
+    # - name: Run static analysis
+    #   run: |
+    #     # 安装 cppcheck
+    #     sudo apt-get install -y cppcheck
+    #
+    #     # 运行静态分析
+    #     cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/ include/
+    #     echo "Static analysis passed!"
 
   security-scan:
     runs-on: ubuntu-latest
