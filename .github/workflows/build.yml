@@ -11,78 +11,10 @@ permissions:
   security-events: write
 
 jobs:
-  # 1️⃣ 依赖安装 + FTXUI 构建
-  setup-deps:
-    name: Setup Dependencies & Build FTXUI
-    runs-on: ubuntu-22.04
-    outputs:
-      ftxui-path: /usr/local
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            build-essential \
-            pkg-config \
-            nlohmann-json3-dev \
-            liblua5.4-dev \
-            libtree-sitter-dev \
-            libavformat-dev \
-            libavcodec-dev \
-            libswscale-dev \
-            libavutil-dev \
-            golang-go \
-            libncurses-dev \
-            libtinfo-dev \
-            git \
-            ccache \
-            clang-12 \
-            clang-15 \
-            gcc \
-            g++
-
-      - name: Build FTXUI
-        run: |
-          git clone --depth 1 --branch main https://github.com/ArthurSonzogni/FTXUI.git
-          cd FTXUI
-          mkdir build && cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_STANDARD=17 \
-            -DCMAKE_INSTALL_PREFIX=/usr/local \
-            -DFTXUI_BUILD_EXAMPLES=OFF \
-            -DFTXUI_BUILD_DOCS=OFF \
-            -DFTXUI_ENABLE_INSTALL=ON
-          make -j$(nproc)
-          sudo make install
-          cd ../..
-          rm -rf FTXUI
-
-      - name: Upload FTXUI artifact
-        run: |
-          # 创建 FTXUI 目录结构
-          mkdir -p ftxui-package/usr/local
-          cp -r /usr/local/include/ftxui ftxui-package/usr/local/include/ 2>/dev/null || true
-          cp -r /usr/local/lib/cmake/FTXUI ftxui-package/usr/local/lib/cmake/ 2>/dev/null || true
-          cp -r /usr/local/lib/libftxui*.a ftxui-package/usr/local/lib/ 2>/dev/null || true
-          cp -r /usr/local/lib/libftxui*.so* ftxui-package/usr/local/lib/ 2>/dev/null || true
-
-      - name: Upload FTXUI artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ftxui
-          path: ftxui-package/
-
-  # 2️⃣ 构建 PNANA
+  # 1️⃣ 构建 PNANA
   build:
     name: Build PNANA on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: setup-deps
     strategy:
       matrix:
         os: [ubuntu-20.04, ubuntu-22.04]
@@ -116,23 +48,49 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download FTXUI artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ftxui
-          path: ftxui-download
-
-      - name: Install FTXUI
+      - name: Install dependencies
         run: |
-          sudo cp -r ftxui-download/usr/local/* /usr/local/ 2>/dev/null || true
-          ls -la /usr/local/lib/cmake/ftxui/ 2>/dev/null || echo "FTXUI cmake files not found"
-          rm -rf ftxui-download
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            build-essential \
+            pkg-config \
+            nlohmann-json3-dev \
+            liblua5.4-dev \
+            libtree-sitter-dev \
+            libavformat-dev \
+            libavcodec-dev \
+            libswscale-dev \
+            libavutil-dev \
+            golang-go \
+            libncurses-dev \
+            libtinfo-dev \
+            git \
+            ccache
 
-      - name: Setup environment
+      - name: Build and install FTXUI
         run: |
-          echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
-          echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
-          echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+          git clone --depth 1 --branch main https://github.com/ArthurSonzogni/FTXUI.git
+          cd FTXUI
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DFTXUI_BUILD_EXAMPLES=OFF \
+            -DFTXUI_BUILD_DOCS=OFF \
+            -DFTXUI_ENABLE_INSTALL=ON
+          make -j$(nproc)
+          sudo make install
+          cd ../..
+          rm -rf FTXUI
+
+    - name: Setup environment
+      run: |
+        echo "CC=${{ matrix.cc }}" >> $GITHUB_ENV
+        echo "CXX=${{ matrix.cxx }}" >> $GITHUB_ENV
+        echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
 
       - name: Cache ccache
         uses: actions/cache@v4
@@ -140,76 +98,76 @@ jobs:
           path: ~/.ccache
           key: ${{ runner.os }}-ccache
 
-      - name: Configure CMake
-        run: |
-          mkdir -p build
-          cd build
-          cmake .. \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DCMAKE_PREFIX_PATH=/usr/local \
-            -DBUILD_TESTING=ON
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+          -DCMAKE_PREFIX_PATH=/usr/local \
+          -DBUILD_TESTING=ON
 
-      - name: Build
-        run: |
-          cd build
-          ninja -j$(nproc) -v
+    - name: Build
+      run: |
+        cd build
+        ninja -j$(nproc) -v
 
-      - name: Show ccache stats
-        run: ccache -s
+    - name: Show ccache stats
+      run: ccache -s
 
-      - name: Test
-        run: |
-          cd build
-          ctest --output-on-failure
+    - name: Test
+      run: |
+        cd build
+        ctest --output-on-failure
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        if: matrix.build_type == 'Release'
-        with:
-          name: pnana-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
-          path: |
-            build/pnana
-            build/compile_commands.json
-          retention-days: 30
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      if: matrix.build_type == 'Release'
+      with:
+        name: pnana-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
+        path: |
+          build/pnana
+          build/compile_commands.json
+        retention-days: 30
 
   # 3️⃣ 代码风格检查
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Install clang-format
+    - name: Install clang-format
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
-      - name: Check code formatting
-        run: |
-          find src include -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror --style=file
-          echo "Code formatting check passed!"
+    - name: Check code formatting
+      run: |
+        find src include -name "*.cpp" -o -name "*.h" | xargs clang-format --dry-run --Werror --style=file
+        echo "Code formatting check passed!"
 
   # 4️⃣ 安全扫描
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
 
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v4
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
