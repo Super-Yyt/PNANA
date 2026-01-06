@@ -1,12 +1,27 @@
 #ifndef PNANA_FEATURES_TERMINAL_COMPLETION_H
 #define PNANA_FEATURES_TERMINAL_COMPLETION_H
 
+#include <chrono>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace pnana {
 namespace features {
 namespace terminal {
+
+// 目录缓存条目
+struct DirectoryCacheEntry {
+    std::vector<std::string> items;
+    std::chrono::steady_clock::time_point timestamp;
+};
+
+// 可执行文件缓存条目
+struct ExecutableCacheEntry {
+    std::vector<std::string> executables;
+    std::chrono::steady_clock::time_point timestamp;
+};
 
 // Tab 补全功能
 class TerminalCompletion {
@@ -18,6 +33,9 @@ class TerminalCompletion {
     static bool complete(const std::string& input, size_t cursor_pos,
                          const std::string& current_directory, std::string& output,
                          size_t& new_cursor_pos);
+
+    // 清除缓存
+    static void clearCache();
 
   private:
     // 补全命令（从 PATH 中查找）
@@ -45,6 +63,18 @@ class TerminalCompletion {
 
     // 列出目录中的文件和文件夹
     static std::vector<std::string> listDirectory(const std::string& dir_path);
+
+    // 检查目录缓存是否有效
+    static bool isDirectoryCacheValid(const DirectoryCacheEntry& entry);
+
+    // 检查可执行文件缓存是否有效
+    static bool isExecutableCacheValid(const ExecutableCacheEntry& entry);
+
+    // 缓存（静态成员）
+    static std::unordered_map<std::string, DirectoryCacheEntry> directory_cache_;
+    static ExecutableCacheEntry executable_cache_;
+    static std::mutex cache_mutex_;
+    static const std::chrono::seconds CACHE_TTL; // 缓存生存时间
 };
 
 } // namespace terminal

@@ -1,5 +1,6 @@
 #include "features/terminal.h"
 #include "features/terminal/terminal_builtin.h"
+#include "features/terminal/terminal_color.h"
 #include "features/terminal/terminal_completion.h"
 #include "features/terminal/terminal_parser.h"
 #include "features/terminal/terminal_shell.h"
@@ -7,6 +8,7 @@
 #include "ui/icons.h"
 #include <cstdlib>
 #include <ftxui/dom/elements.hpp>
+#include <signal.h>
 #include <unistd.h>
 
 using namespace ftxui;
@@ -16,7 +18,8 @@ namespace features {
 
 Terminal::Terminal(ui::Theme& theme)
     : theme_(theme), visible_(false), history_index_(0), max_history_size_(100), current_input_(""),
-      cursor_position_(0), max_output_lines_(1000), scroll_offset_(0), current_directory_(".") {
+      cursor_position_(0), max_output_lines_(1000), scroll_offset_(0), current_directory_("."),
+      command_running_(false), current_pid_(0) {
     // 初始化当前目录
     char* cwd = getcwd(nullptr, 0);
     if (cwd) {
@@ -89,6 +92,69 @@ void Terminal::handleKeyEvent(const std::string& key) {
         if (cursor_position_ < current_input_.length()) {
             current_input_.erase(cursor_position_, 1);
         }
+    } else if (key == "Ctrl+C") {
+        // Ctrl+C: 中断当前命令或清空输入行
+        if (command_running_) {
+            // 如果有命令正在运行，中断它
+            interruptCommand();
+        } else if (!current_input_.empty()) {
+            // 如果有输入，清空当前输入行
+            current_input_.clear();
+            cursor_position_ = 0;
+            addOutputLine("^C", false);
+        }
+    } else if (key == "Ctrl+D") {
+        // Ctrl+D: 退出终端（如果输入行为空）或删除字符
+        if (current_input_.empty()) {
+            // 输入行为空，关闭终端
+            setVisible(false);
+        } else {
+            // 删除光标处字符（同Delete）
+            if (cursor_position_ < current_input_.length()) {
+                current_input_.erase(cursor_position_, 1);
+            }
+        }
+    } else if (key == "Ctrl+L") {
+        // Ctrl+L: 清屏
+        executeCommand("clear");
+    } else if (key == "Ctrl+U") {
+        // Ctrl+U: 删除光标前所有字符
+        if (cursor_position_ > 0) {
+            current_input_.erase(0, cursor_position_);
+            cursor_position_ = 0;
+        }
+    } else if (key == "Ctrl+K") {
+        // Ctrl+K: 删除光标后所有字符
+        if (cursor_position_ < current_input_.length()) {
+            current_input_.erase(cursor_position_);
+        }
+    } else if (key == "Ctrl+A") {
+        // Ctrl+A: 移动到行首
+        cursor_position_ = 0;
+    } else if (key == "Ctrl+E") {
+        // Ctrl+E: 移动到行尾
+        cursor_position_ = current_input_.length();
+    } else if (key == "Ctrl+W") {
+        // Ctrl+W: 删除前一个单词
+        if (cursor_position_ > 0) {
+            size_t new_pos = cursor_position_;
+            // 跳过当前单词结尾的空格
+            while (new_pos > 0 && current_input_[new_pos - 1] == ' ') {
+                new_pos--;
+            }
+            // 删除单词
+            while (new_pos > 0 && current_input_[new_pos - 1] != ' ') {
+                new_pos--;
+            }
+            current_input_.erase(new_pos, cursor_position_ - new_pos);
+            cursor_position_ = new_pos;
+        }
+    } else if (key == "PageUp") {
+        // PageUp: 向上滚动页面
+        scrollUp();
+    } else if (key == "PageDown") {
+        // PageDown: 向下滚动页面
+        scrollDown();
     }
 }
 
@@ -134,10 +200,15 @@ void Terminal::executeCommand(const std::string& command) {
             current_directory_, output_lines_);
         // cd 命令通常没有输出，但如果有错误会返回错误信息
         if (!cd_result.empty()) {
-            std::istringstream iss(cd_result);
-            std::string line;
-            while (std::getline(iss, line)) {
-                addOutputLine(line, false);
+            // 添加错误图标和更好的格式
+            addOutputLine(pnana::ui::icons::ERROR + std::string(" ") + cd_result, false);
+        } else {
+            // 成功时显示新目录（可选，通过环境变量控制）
+            const char* show_cd = getenv("PNANA_TERMINAL_SHOW_CD");
+            if (show_cd && std::string(show_cd) == "1") {
+                addOutputLine(pnana::ui::icons::FOLDER + std::string(" Changed directory to: ") +
+                                  current_directory_,
+                              false);
             }
         }
         return;
@@ -156,12 +227,43 @@ void Terminal::executeCommand(const std::string& command) {
         ShellCommandExecutor::executeShellCommand(cmd, is_background, current_directory_);
 
     if (!result.empty()) {
-        // 如果结果包含多行，需要分割
-        std::istringstream iss(result);
-        std::string line;
-        while (std::getline(iss, line)) {
-            addOutputLine(line, false);
+        // 检查是否是错误输出（通常错误信息会以"Error:"或特定模式开头）
+        bool is_error = (result.find("Error:") == 0 || result.find("Failed to") == 0 ||
+                         result.find("Command failed") == 0 || result.find("cd:") == 0 ||
+                         result.find("ls:") == 0 || result.find("cat:") == 0);
+
+        // 优化多行输出处理，避免使用 stringstream
+        size_t start = 0;
+        size_t end = 0;
+
+        // 预分配输出行向量以提高性能
+        std::vector<std::string> lines;
+        lines.reserve(std::count(result.begin(), result.end(), '\n') + 1);
+
+        while ((end = result.find('\n', start)) != std::string::npos) {
+            std::string line = result.substr(start, end - start);
+            if (is_error && !line.empty()) {
+                line = pnana::ui::icons::ERROR + std::string(" ") + line; // 为错误行添加错误图标
+            }
+            lines.emplace_back(line);
+            start = end + 1;
         }
+
+        // 处理最后一行（如果没有以换行符结尾）
+        if (start < result.length()) {
+            std::string last_line = result.substr(start);
+            if (is_error && !last_line.empty()) {
+                last_line = pnana::ui::icons::ERROR + std::string(" ") + last_line;
+            }
+            lines.emplace_back(last_line);
+        }
+
+        // 批量添加输出行（更高效）
+        addOutputLines(lines, false);
+    } else if (is_background) {
+        // 后台命令成功启动的反馈
+        addOutputLine(pnana::ui::icons::SUCCESS + std::string(" Command started in background"),
+                      false);
     }
 }
 
@@ -172,48 +274,85 @@ ftxui::Element Terminal::render(int /* height */) {
 }
 
 void Terminal::addOutputLine(const std::string& line, bool is_command) {
-    output_lines_.push_back(TerminalLine(line, is_command));
+    // 使用环形缓冲区优化：当达到最大行数时，移除最旧的行
+    if (output_lines_.size() >= max_output_lines_) {
+        // 移除最旧的行（从开头移除）
+        output_lines_.erase(output_lines_.begin());
+    }
 
-    // 限制输出行数
-    if (output_lines_.size() > max_output_lines_) {
-        output_lines_.erase(output_lines_.begin(),
-                            output_lines_.begin() + (output_lines_.size() - max_output_lines_));
+    bool has_ansi = terminal::AnsiColorParser::hasAnsiCodes(line);
+    output_lines_.push_back(TerminalLine(line, is_command, has_ansi));
+}
+
+void Terminal::addOutputLines(const std::vector<std::string>& lines, bool is_command) {
+    // 批量添加多行输出，预先计算需要移除的行数
+    size_t total_lines = output_lines_.size() + lines.size();
+    size_t lines_to_remove = 0;
+
+    if (total_lines > max_output_lines_) {
+        lines_to_remove = total_lines - max_output_lines_;
+        if (lines_to_remove > output_lines_.size()) {
+            lines_to_remove = output_lines_.size();
+        }
+    }
+
+    // 移除多余的行
+    if (lines_to_remove > 0) {
+        output_lines_.erase(output_lines_.begin(), output_lines_.begin() + lines_to_remove);
+    }
+
+    // 批量添加新行
+    output_lines_.reserve(output_lines_.size() + lines.size());
+    for (const auto& line : lines) {
+        bool has_ansi = terminal::AnsiColorParser::hasAnsiCodes(line);
+        output_lines_.emplace_back(line, is_command, has_ansi);
     }
 }
 
 std::string Terminal::buildPrompt() const {
     using namespace terminal;
 
-    // 构建提示符字符串（用于输出历史）
-    std::ostringstream oss;
+    // 预计算各个部分的大小以优化内存分配
+    static const std::string separator = " · ";
+    static const std::string prompt_end = " → ";
 
-    // 第一部分：用户名@主机名
-    oss << TerminalUtils::getUsername() << "@" << TerminalUtils::getHostname();
-
-    // 分隔符
-    oss << " · ";
-
-    // 第二部分：时间戳
-    oss << TerminalUtils::getCurrentTime();
-
-    // 分隔符
-    oss << " · ";
-
-    // 第三部分：目录路径
+    std::string username = TerminalUtils::getUsername();
+    std::string hostname = TerminalUtils::getHostname();
+    std::string time_str = TerminalUtils::getCurrentTime();
     std::string dir = TerminalUtils::simplifyPath(current_directory_);
     dir = TerminalUtils::truncatePath(dir, 25);
-    oss << dir;
-
-    // 第四部分：Git 分支（如果有）
     std::string git_branch = TerminalUtils::getGitBranch(current_directory_);
+
+    // 预估总长度以减少重新分配
+    size_t estimated_size = username.length() + hostname.length() + time_str.length() +
+                            dir.length() + separator.length() * 3 + prompt_end.length() + 10;
+
     if (!git_branch.empty()) {
-        oss << " · git:" << git_branch;
+        estimated_size += git_branch.length() + 5; // "git:" + separator
     }
 
-    // 提示符结束符号（与输入行保持一致）
-    oss << " → ";
+    std::string result;
+    result.reserve(estimated_size);
 
-    return oss.str();
+    // 构建提示符字符串
+    result += username;
+    result += "@";
+    result += hostname;
+    result += separator;
+    result += time_str;
+    result += separator;
+    result += dir;
+
+    // Git 分支（如果有）
+    if (!git_branch.empty()) {
+        result += separator;
+        result += "git:";
+        result += git_branch;
+    }
+
+    result += prompt_end;
+
+    return result;
 }
 
 std::string Terminal::getUsername() const {
@@ -256,6 +395,16 @@ ftxui::Color Terminal::getErrorColor() const {
 void Terminal::clear() {
     output_lines_.clear();
     // 清空后不显示任何消息，更像真实终端
+}
+
+void Terminal::interruptCommand() {
+    if (command_running_ && current_pid_ > 0) {
+        // 发送SIGINT信号中断进程
+        kill(current_pid_, SIGINT);
+        command_running_ = false;
+        current_pid_ = 0;
+        addOutputLine("^C", false);
+    }
 }
 
 // 保留旧的方法以保持兼容性（已移至各个模块）

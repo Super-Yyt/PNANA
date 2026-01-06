@@ -15,6 +15,11 @@ namespace pnana {
 namespace features {
 namespace terminal {
 
+// 静态成员初始化
+std::unordered_map<std::string, GitBranchCacheEntry> TerminalUtils::git_branch_cache_;
+std::mutex TerminalUtils::git_cache_mutex_;
+const std::chrono::seconds TerminalUtils::GIT_CACHE_TTL(5); // 5秒缓存
+
 std::string TerminalUtils::getUsername() {
     struct passwd* pw = getpwuid(getuid());
     if (pw) {
@@ -43,7 +48,39 @@ std::string TerminalUtils::getCurrentTime() {
     return oss.str();
 }
 
+void TerminalUtils::clearGitBranchCache() {
+    std::lock_guard<std::mutex> lock(git_cache_mutex_);
+    git_branch_cache_.clear();
+}
+
+bool TerminalUtils::isGitBranchCacheValid(const GitBranchCacheEntry& entry,
+                                          const std::string& directory) {
+    auto now = std::chrono::steady_clock::now();
+    return (now - entry.timestamp) < GIT_CACHE_TTL && entry.directory == directory;
+}
+
+std::string TerminalUtils::getCachedGitBranch(const std::string& directory) {
+    std::lock_guard<std::mutex> lock(git_cache_mutex_);
+    auto it = git_branch_cache_.find(directory);
+    if (it != git_branch_cache_.end() && isGitBranchCacheValid(it->second, directory)) {
+        return it->second.branch;
+    }
+    return "";
+}
+
+void TerminalUtils::setCachedGitBranch(const std::string& directory, const std::string& branch) {
+    std::lock_guard<std::mutex> lock(git_cache_mutex_);
+    GitBranchCacheEntry entry{branch, std::chrono::steady_clock::now(), directory};
+    git_branch_cache_[directory] = entry;
+}
+
 std::string TerminalUtils::getGitBranch(const std::string& directory) {
+    // 先检查缓存
+    std::string cached_branch = getCachedGitBranch(directory);
+    if (!cached_branch.empty() || cached_branch == "") {
+        return cached_branch;
+    }
+
     fs::path git_dir = fs::path(directory) / ".git";
     fs::path check_dir = directory;
 
@@ -66,6 +103,8 @@ std::string TerminalUtils::getGitBranch(const std::string& directory) {
                             if (!branch.empty() && branch.back() == '\n') {
                                 branch.pop_back();
                             }
+                            // 缓存结果
+                            setCachedGitBranch(directory, branch);
                             return branch;
                         }
                     }
@@ -81,6 +120,8 @@ std::string TerminalUtils::getGitBranch(const std::string& directory) {
         check_dir = check_dir.parent_path();
     }
 
+    // 缓存空结果
+    setCachedGitBranch(directory, "");
     return "";
 }
 

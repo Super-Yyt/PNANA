@@ -13,6 +13,12 @@ namespace pnana {
 namespace features {
 namespace terminal {
 
+// 静态成员初始化
+std::unordered_map<std::string, DirectoryCacheEntry> TerminalCompletion::directory_cache_;
+ExecutableCacheEntry TerminalCompletion::executable_cache_;
+std::mutex TerminalCompletion::cache_mutex_;
+const std::chrono::seconds TerminalCompletion::CACHE_TTL(10); // 10秒缓存
+
 bool TerminalCompletion::complete(const std::string& input, size_t cursor_pos,
                                   const std::string& current_directory, std::string& output,
                                   size_t& new_cursor_pos) {
@@ -272,7 +278,31 @@ std::string TerminalCompletion::expandPath(const std::string& path,
     return expanded;
 }
 
+void TerminalCompletion::clearCache() {
+    std::lock_guard<std::mutex> lock(cache_mutex_);
+    directory_cache_.clear();
+    executable_cache_ = ExecutableCacheEntry();
+}
+
+bool TerminalCompletion::isDirectoryCacheValid(const DirectoryCacheEntry& entry) {
+    auto now = std::chrono::steady_clock::now();
+    return (now - entry.timestamp) < CACHE_TTL;
+}
+
+bool TerminalCompletion::isExecutableCacheValid(const ExecutableCacheEntry& entry) {
+    auto now = std::chrono::steady_clock::now();
+    return (now - entry.timestamp) < CACHE_TTL;
+}
+
 std::vector<std::string> TerminalCompletion::getExecutablesFromPath() {
+    // 检查缓存
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        if (!executable_cache_.executables.empty() && isExecutableCacheValid(executable_cache_)) {
+            return executable_cache_.executables;
+        }
+    }
+
     std::vector<std::string> executables;
 
     const char* path_env = getenv("PATH");
@@ -308,10 +338,27 @@ std::vector<std::string> TerminalCompletion::getExecutablesFromPath() {
     }
 
     std::sort(executables.begin(), executables.end());
+
+    // 更新缓存
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        executable_cache_.executables = executables;
+        executable_cache_.timestamp = std::chrono::steady_clock::now();
+    }
+
     return executables;
 }
 
 std::vector<std::string> TerminalCompletion::listDirectory(const std::string& dir_path) {
+    // 检查缓存
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        auto it = directory_cache_.find(dir_path);
+        if (it != directory_cache_.end() && isDirectoryCacheValid(it->second)) {
+            return it->second.items;
+        }
+    }
+
     std::vector<std::string> items;
 
     try {
@@ -327,6 +374,13 @@ std::vector<std::string> TerminalCompletion::listDirectory(const std::string& di
         std::sort(items.begin(), items.end());
     } catch (const std::exception&) {
         // 忽略错误
+    }
+
+    // 更新缓存
+    {
+        std::lock_guard<std::mutex> lock(cache_mutex_);
+        DirectoryCacheEntry entry{items, std::chrono::steady_clock::now()};
+        directory_cache_[dir_path] = entry;
     }
 
     return items;
