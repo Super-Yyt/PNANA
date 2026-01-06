@@ -35,6 +35,14 @@ class Client {
     // 连接到 SSH 服务器并写入文件
     Result writeFile(const ui::SSHConfig& config, const std::string& content);
 
+    // 上传文件到 SSH 服务器
+    Result uploadFile(const ui::SSHConfig& config, const std::string& localPath,
+                      const std::string& remotePath);
+
+    // 从 SSH 服务器下载文件
+    Result downloadFile(const ui::SSHConfig& config, const std::string& remotePath,
+                        const std::string& localPath);
+
   private:
     void* go_client_; // Go 客户端句柄（如果需要）
 };

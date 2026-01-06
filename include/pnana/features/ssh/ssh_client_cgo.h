@@ -24,6 +24,8 @@ typedef struct {
 // C 接口函数（由 Go 模块提供）
 SSHResult_C* ConnectAndReadFile(SSHConfig_C* config);
 SSHResult_C* ConnectAndWriteFile(SSHConfig_C* config, const char* content);
+SSHResult_C* UploadFile(SSHConfig_C* config, const char* localPath, const char* remotePath);
+SSHResult_C* DownloadFile(SSHConfig_C* config, const char* remotePath, const char* localPath);
 void FreeSSHResult(SSHResult_C* result);
 
 #ifdef __cplusplus
