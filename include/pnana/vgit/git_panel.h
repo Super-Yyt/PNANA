@@ -1,0 +1,124 @@
+#ifndef PNANA_VGIT_GIT_PANEL_H
+#define PNANA_VGIT_GIT_PANEL_H
+
+#include "ui/theme.h"
+#include "vgit/git_manager.h"
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/component_base.hpp>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
+
+namespace pnana {
+namespace vgit {
+
+enum class GitPanelMode { STATUS, COMMIT, BRANCH, REMOTE };
+
+class GitPanel {
+  public:
+    GitPanel(ui::Theme& theme, const std::string& repo_path = ".");
+    ~GitPanel() = default;
+
+    // UI methods
+    ftxui::Component getComponent();
+    bool isVisible() const {
+        return visible_;
+    }
+    void show() {
+        visible_ = true;
+    }
+    void hide() {
+        visible_ = false;
+    }
+    void toggle() {
+        visible_ = !visible_;
+    }
+
+    // Event handlers
+    void onShow();
+    void onHide();
+
+    // Data management
+    void refreshData();
+
+    // Key handlers
+    bool onKeyPress(ftxui::Event event);
+
+  private:
+    ui::Theme& theme_;
+    std::unique_ptr<GitManager> git_manager_;
+    bool visible_ = false;
+    bool data_loaded_ = false;  // 标记数据是否已加载
+    bool data_loading_ = false; // 标记数据是否正在加载
+    std::mutex data_mutex_;     // 保护数据访问的互斥锁
+
+    // UI state
+    GitPanelMode current_mode_ = GitPanelMode::STATUS;
+    std::vector<GitFile> files_;
+    std::vector<GitBranch> branches_;
+    size_t selected_index_ = 0;
+    size_t scroll_offset_ = 0;
+    std::string commit_message_;
+    std::string branch_name_;
+    std::string error_message_;
+
+    // UI components
+    ftxui::Component main_component_;
+    ftxui::Component file_list_component_;
+    ftxui::Component commit_input_component_;
+    ftxui::Component branch_list_component_;
+
+    // Selection state
+    std::vector<size_t> selected_files_; // indices of selected files
+
+    // Private methods
+    void switchMode(GitPanelMode mode);
+    void toggleFileSelection(size_t index);
+    void clearSelection();
+    void selectAll();
+    void performStageSelected();
+    void performUnstageSelected();
+    void performCommit();
+    void performPush();
+    void performPull();
+    void performCreateBranch();
+    void performSwitchBranch();
+
+    // UI rendering
+    ftxui::Element renderHeader();
+    ftxui::Element renderTabs();
+    ftxui::Element renderStatusPanel();
+    ftxui::Element renderCommitPanel();
+    ftxui::Element renderBranchPanel();
+    ftxui::Element renderRemotePanel();
+    ftxui::Element renderFileItem(const GitFile& file, size_t index, bool is_selected);
+    ftxui::Element renderBranchItem(const GitBranch& branch, size_t index, bool is_selected);
+    ftxui::Element renderFooter();
+    ftxui::Element renderError();
+    ftxui::Element separatorLight();
+
+    // Component builders
+    ftxui::Component buildMainComponent();
+    ftxui::Component buildFileListComponent();
+    ftxui::Component buildCommitInputComponent();
+    ftxui::Component buildBranchListComponent();
+
+    // Key handlers
+    bool handleStatusModeKey(ftxui::Event event);
+    bool handleCommitModeKey(ftxui::Event event);
+    bool handleBranchModeKey(ftxui::Event event);
+    bool handleRemoteModeKey(ftxui::Event event);
+
+    // Utility methods
+    std::string getStatusIcon(GitFileStatus status) const;
+    std::string getStatusText(GitFileStatus status) const;
+    std::string getModeTitle(GitPanelMode mode) const;
+    bool hasStagedChanges() const;
+    bool hasUnstagedChanges() const;
+};
+
+} // namespace vgit
+} // namespace pnana
+
+#endif // PNANA_VGIT_GIT_PANEL_H
