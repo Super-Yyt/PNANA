@@ -154,6 +154,11 @@ bool TerminalHandler::handleInput(Event event, Editor* editor) {
 }
 
 bool TerminalHandler::handleNavigation(Event event, Editor* editor) {
+    // 如果在分屏模式下，让 InputRouter 处理分屏导航
+    if (editor->getSplitViewManager().hasSplits()) {
+        return false;
+    }
+
     // 终端区域导航：左右键用于切换面板
     if (event == Event::ArrowLeft) {
         // 左键：切换到左侧面板（文件浏览器或代码区）
