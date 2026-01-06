@@ -455,8 +455,7 @@ endif()
 # 配置 Tree-sitter 库链接
 include(ConfigureTreeSitterLinking)
 
-# 安装
-install(TARGETS pnana RUNTIME DESTINATION bin)
+# 安装配置在后面定义
 
 # 设置版本信息
 set_target_properties(pnana PROPERTIES
@@ -512,3 +511,127 @@ if(UNIX AND EXISTS "${CMAKE_SOURCE_DIR}/plugins")
     message(STATUS "Plugin installation script configured")
     message(STATUS "  Plugins will be copied to: ~/.config/pnana/plugins")
 endif()
+
+# ============================================================================
+# 构建时文件复制和脚本生成配置
+# ============================================================================
+
+# 复制配置文件到构建目录
+configure_file(
+    ${CMAKE_SOURCE_DIR}/config/default_config.json
+    ${CMAKE_BINARY_DIR}/default_config.json
+    COPYONLY
+)
+
+# 复制插件文件到构建目录
+file(GLOB_RECURSE PLUGIN_FILES "${CMAKE_SOURCE_DIR}/plugins/*")
+foreach(PLUGIN_FILE ${PLUGIN_FILES})
+    # 只复制文件，跳过目录
+    if(NOT IS_DIRECTORY ${PLUGIN_FILE})
+        get_filename_component(PLUGIN_FILENAME ${PLUGIN_FILE} NAME)
+        # 获取相对路径
+        file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/plugins" ${PLUGIN_FILE})
+        get_filename_component(REL_DIR ${REL_PATH} DIRECTORY)
+        if(REL_DIR)
+            file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/plugins/${REL_DIR})
+        endif()
+        configure_file(
+            ${PLUGIN_FILE}
+            ${CMAKE_BINARY_DIR}/plugins/${REL_PATH}
+            COPYONLY
+        )
+    endif()
+endforeach()
+
+# 生成安装脚本
+configure_file(
+    ${CMAKE_SOURCE_DIR}/cmake/install_script_template.sh.in
+    ${CMAKE_BINARY_DIR}/install.sh
+    @ONLY
+)
+
+# 设置安装脚本为可执行
+file(CHMOD ${CMAKE_BINARY_DIR}/install.sh
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                GROUP_READ GROUP_EXECUTE
+                WORLD_READ WORLD_EXECUTE
+)
+
+# ============================================================================
+# 安装配置
+# ============================================================================
+
+# 安装可执行文件到系统目录（仅在实际安装时）
+install(TARGETS pnana
+    RUNTIME DESTINATION bin
+    COMPONENT pnana
+)
+
+# 安装默认配置文件到系统共享目录
+install(FILES
+    ${CMAKE_SOURCE_DIR}/config/default_config.json
+    DESTINATION share/pnana/
+    COMPONENT config
+)
+
+# 安装插件文件到系统共享目录（作为模板）
+if(EXISTS "${CMAKE_SOURCE_DIR}/plugins")
+    install(DIRECTORY
+        ${CMAKE_SOURCE_DIR}/plugins/
+        DESTINATION share/pnana/plugins/
+        COMPONENT plugins
+        FILES_MATCHING PATTERN "*"
+        PATTERN ".git" EXCLUDE
+        PATTERN ".gitignore" EXCLUDE
+        PATTERN "CMakeLists.txt" EXCLUDE
+        PATTERN "*.md" EXCLUDE
+    )
+endif()
+
+# 创建安装脚本
+configure_file(
+    ${CMAKE_SOURCE_DIR}/build/install_plugins.sh
+    ${CMAKE_BINARY_DIR}/install_plugins_final.sh
+    @ONLY
+)
+
+# 添加自定义安装目标
+add_custom_target(install-user
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --component pnana --prefix /usr/local
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --component config --prefix $ENV{HOME}/.config/pnana
+    COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR} --component plugins --prefix $ENV{HOME}/.config/pnana
+    COMMENT "Installing pnana to system and user directories"
+)
+
+# Linux 包创建目标
+if(UNIX AND NOT APPLE)
+    add_custom_target(package-deb
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target package
+        COMMAND ${CMAKE_COMMAND} -E echo "DEB package created: ${CMAKE_BINARY_DIR}/pnana-${CPACK_PACKAGE_VERSION}-amd64.deb"
+        COMMENT "Creating DEB package for Debian/Ubuntu"
+    )
+
+    add_custom_target(package-rpm
+        COMMAND ${CMAKE_COMMAND} -DCPACK_GENERATOR=RPM ${CMAKE_BINARY_DIR}
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target package
+        COMMAND ${CMAKE_COMMAND} -E echo "RPM package created: ${CMAKE_BINARY_DIR}/pnana-${CPACK_PACKAGE_VERSION}-x86_64.rpm"
+        COMMENT "Creating RPM package for Red Hat/Fedora"
+    )
+
+    add_custom_target(package-arch
+        COMMAND ${CMAKE_COMMAND} -DCPACK_GENERATOR=TXZ ${CMAKE_BINARY_DIR}
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target package
+        COMMAND ${CMAKE_COMMAND} -E echo "Arch Linux package created: ${CMAKE_BINARY_DIR}/pnana-${CPACK_PACKAGE_VERSION}-x86_64.tar.xz"
+        COMMENT "Creating TXZ package for Arch Linux"
+    )
+endif()
+
+# 构建完成提示已移除，避免CMake语法问题
+# 用户可以通过运行 './install.sh --help' 查看安装选项
+
+# ============================================================================
+# 打包配置
+# ============================================================================
+
+# 包含打包配置文件
+include(${CMAKE_SOURCE_DIR}/cmake/PackageConfig.cmake)
