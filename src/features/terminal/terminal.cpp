@@ -238,7 +238,12 @@ void Terminal::executeCommand(const std::string& command) {
 
         // 预分配输出行向量以提高性能
         std::vector<std::string> lines;
-        lines.reserve(std::count(result.begin(), result.end(), '\n') + 1);
+        size_t line_count = 0;
+        for (char c : result) {
+            if (c == '\n')
+                line_count++;
+        }
+        lines.reserve(line_count + 1);
 
         while ((end = result.find('\n', start)) != std::string::npos) {
             std::string line = result.substr(start, end - start);
