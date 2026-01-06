@@ -2,11 +2,13 @@
 #define PNANA_FEATURES_LSP_LSP_REQUEST_MANAGER_H
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <map>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <vector>
