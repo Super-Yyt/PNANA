@@ -35,7 +35,7 @@ inline bool isAsciiAlpha(unsigned char c) {
 }
 
 // 安全地获取字符（处理UTF-8多字节字符）
-inline size_t skipUtf8Char(const std::string& str, size_t pos) {
+[[maybe_unused]] inline size_t skipUtf8Char(const std::string& str, size_t pos) {
     if (pos >= str.length())
         return pos;
     unsigned char c = static_cast<unsigned char>(str[pos]);
