@@ -149,12 +149,10 @@ void LspRequestManager::workerLoop() {
             }
         }
 
-        // Execute outside lock and measure duration
+        // Execute outside lock
         try {
-            auto start = std::chrono::steady_clock::now();
             req.task();
-            auto end = std::chrono::steady_clock::now();
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            // Request executed successfully
             // Request executed successfully
         } catch (const std::exception& e) {
             LOG_WARNING(std::string("Exception executing LSP request id=") +
