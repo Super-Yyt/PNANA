@@ -76,6 +76,9 @@ static void initializeActionInfos() {
     action_infos_.emplace_back(KeyAction::TRIGGER_COMPLETION, ActionGroup::EDIT_OPS,
                                "trigger_completion", "Trigger code completion",
                                std::vector<std::string>{"ctrl_space"});
+    action_infos_.emplace_back(KeyAction::SHOW_DIAGNOSTICS, ActionGroup::EDIT_OPS,
+                               "show_diagnostics", "Show diagnostics popup",
+                               std::vector<std::string>{"alt_e"});
 #endif
 
     // 搜索和导航

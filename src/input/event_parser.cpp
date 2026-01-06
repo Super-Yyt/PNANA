@@ -300,9 +300,12 @@ std::string EventParser::parseAltKey(const ftxui::Event& event) const {
             return "alt_space";
         }
         std::transform(ch.begin(), ch.end(), ch.begin(), ::tolower);
-        if (ch.length() == 1 &&
-            ((ch[0] >= 'a' && ch[0] <= 'z') || (ch[0] >= '0' && ch[0] <= '9'))) {
-            return "alt_" + ch;
+        if (ch.length() == 1) {
+            // 字母、数字、以及一些特殊字符
+            if ((ch[0] >= 'a' && ch[0] <= 'z') || (ch[0] >= '0' && ch[0] <= '9') || ch[0] == '=' ||
+                ch[0] == '+' || ch[0] == '-' || ch[0] == '_') {
+                return "alt_" + ch;
+            }
         }
     }
 

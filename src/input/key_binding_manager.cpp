@@ -53,6 +53,7 @@ void KeyBindingManager::initializeEditOperationBindings() {
     bindKey("ctrl_slash", KeyAction::TOGGLE_COMMENT);
 #ifdef BUILD_LSP_SUPPORT
     bindKey("ctrl_space", KeyAction::TRIGGER_COMPLETION);
+    bindKey("alt_e", KeyAction::SHOW_DIAGNOSTICS);
 #endif
 }
 
@@ -97,6 +98,10 @@ void KeyBindingManager::initializeTabOperationBindings() {
 
 KeyAction KeyBindingManager::getAction(const ftxui::Event& event) const {
     std::string key = parser_.eventToKey(event);
+
+    // Debug Alt+E detection
+    (void)key;
+    (void)event;
 
     // ??????? Ctrl+P ??
     if (event == ftxui::Event::CtrlP) {

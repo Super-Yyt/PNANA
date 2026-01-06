@@ -46,6 +46,7 @@ bool ActionExecutor::execute(KeyAction action) {
             return executeEditOperation(action);
 #ifdef BUILD_LSP_SUPPORT
         case KeyAction::TRIGGER_COMPLETION:
+        case KeyAction::SHOW_DIAGNOSTICS:
             return executeEditOperation(action);
 #endif
 
@@ -195,6 +196,9 @@ bool ActionExecutor::executeEditOperation(KeyAction action) {
 #ifdef BUILD_LSP_SUPPORT
         case KeyAction::TRIGGER_COMPLETION:
             editor_->triggerCompletion();
+            return true;
+        case KeyAction::SHOW_DIAGNOSTICS:
+            editor_->showDiagnosticsPopup();
             return true;
 #endif
         default:

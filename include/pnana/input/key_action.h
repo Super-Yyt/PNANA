@@ -40,6 +40,7 @@ enum class KeyAction {
     UNINDENT_LINE,
     TOGGLE_COMMENT,
     TRIGGER_COMPLETION, // 触发代码补全
+    SHOW_DIAGNOSTICS,   // 显示诊断信息
 
     // 搜索和导航
     SEARCH,
