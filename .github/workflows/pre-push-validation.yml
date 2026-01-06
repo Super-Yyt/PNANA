@@ -157,7 +157,7 @@ jobs:
               owner: owner,
               repo: repo,
               title: title,
-              body: body + '\n\n[View Build Logs](' + logsUrl + ')'
+              body: body + '\n\n[View Build Logs](' + logsUrl + ')',
               labels: ['build-failure', 'automated', 'high-priority']
             });
           }
