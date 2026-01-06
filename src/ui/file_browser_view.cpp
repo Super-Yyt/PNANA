@@ -10,7 +10,8 @@ using namespace ftxui;
 namespace pnana {
 namespace ui {
 
-FileBrowserView::FileBrowserView(Theme& theme) : theme_(theme), scroll_offset_(0) {}
+FileBrowserView::FileBrowserView(Theme& theme)
+    : theme_(theme), color_mapper_(theme), scroll_offset_(0) {}
 
 // 滚动控制方法
 void FileBrowserView::scrollTo(size_t index) {
@@ -175,7 +176,7 @@ Element FileBrowserView::renderFileItem(const features::FileItem* item, size_t i
     auto& colors = theme_.getColors();
 
     std::string icon = getFileIcon(*item);
-    Color item_color = getFileColor(*item);
+    Color item_color = color_mapper_.getFileColor(item->name, item->is_directory);
 
     // 构建树形结构连接线
     std::string tree_prefix = buildTreePrefix(item, index, flat_items);
@@ -729,32 +730,6 @@ std::string FileBrowserView::getFileExtension(const std::string& filename) const
         return filename.substr(pos + 1);
     }
     return "";
-}
-
-Color FileBrowserView::getFileColor(const features::FileItem& item) const {
-    auto& colors = theme_.getColors();
-
-    if (item.is_directory) {
-        return colors.function; // 蓝色
-    }
-
-    std::string ext = getFileExtension(item.name);
-
-    // 根据文件类型返回颜色
-    if (ext == "cpp" || ext == "c" || ext == "h" || ext == "hpp") {
-        return colors.keyword; // 紫色
-    }
-    if (ext == "py" || ext == "js" || ext == "ts" || ext == "java") {
-        return colors.string; // 绿色
-    }
-    if (ext == "md" || ext == "txt") {
-        return colors.foreground; // 白色
-    }
-    if (ext == "json" || ext == "xml" || ext == "yml") {
-        return colors.number; // 橙色
-    }
-
-    return colors.comment; // 灰色
 }
 
 std::string FileBrowserView::truncateMiddle(const std::string& str, size_t max_length) const {

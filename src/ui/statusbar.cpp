@@ -30,7 +30,8 @@ Element Statusbar::render(const std::string& filename, bool is_modified, bool is
                           const std::string& file_type, const std::string& message,
                           const std::string& region_name, bool syntax_highlighting,
                           bool has_selection, size_t selection_length,
-                          const std::string& git_branch, int git_uncommitted_count) {
+                          const std::string& git_branch, int git_uncommitted_count,
+                          const std::string& ssh_host, const std::string& ssh_user) {
     auto& colors = theme_.getColors();
 
     // Neovim 风格状态栏：左侧、中间、右侧三部分
@@ -107,6 +108,15 @@ Element Statusbar::render(const std::string& filename, bool is_modified, bool is
             git_oss << " " << git_uncommitted_count;
             left_elements.push_back(text(git_oss.str()) | color(colors.warning) | bold);
         }
+    }
+
+    // SSH连接状态
+    if (!ssh_host.empty() && !ssh_user.empty()) {
+        left_elements.push_back(text(" │ ") | color(colors.comment) | dim);
+        // 使用终端图标表示SSH连接
+        left_elements.push_back(text(icons::TERMINAL) | color(colors.success));
+        left_elements.push_back(text(" " + ssh_user + "@" + ssh_host) | color(colors.function) |
+                                bold);
     }
 
     // ========== 中间部分 ==========

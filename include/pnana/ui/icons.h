@@ -437,6 +437,80 @@ constexpr const char* TERRAFORM = "\uf1c0";      // nf-fa-cube (Terraform)
 constexpr const char* ANSIBLE = "\uf013";        // nf-fa-cog (Ansible)
 constexpr const char* VAGRANT = "\uf1c0";        // nf-fa-cube (Vagrant)
 
+// Git 相关图标
+constexpr const char* GIT_REPO = "\uf1d3";         // nf-fa-code-fork (仓库)
+constexpr const char* GIT_COMMIT = "\uf1d8";       // nf-fa-dot-circle-o (提交)
+constexpr const char* GIT_MERGE = "\uf126";        // nf-fa-code-fork (合并)
+constexpr const char* GIT_PULL_REQUEST = "\uf126"; // nf-fa-code-fork (拉取请求)
+constexpr const char* GIT_TAG = "\uf02b";          // nf-fa-tag (标签)
+constexpr const char* GIT_STASH = "\uf187";        // nf-fa-archive (贮藏)
+constexpr const char* GIT_CONFLICT = "\uf06a";     // nf-fa-exclamation-circle (冲突)
+constexpr const char* GIT_DIFF = "\uf067";         // nf-fa-plus (差异)
+constexpr const char* GIT_HISTORY = "\uf1da";      // nf-fa-history (历史)
+constexpr const char* GIT_REMOTE = "\uf0c2";       // nf-fa-cloud (远程)
+
+// 状态和操作图标
+constexpr const char* CHECK_CIRCLE = "\uf058";       // nf-fa-check-circle (成功)
+constexpr const char* EXCLAMATION_CIRCLE = "\uf06a"; // nf-fa-exclamation-circle (错误)
+constexpr const char* QUESTION_CIRCLE = "\uf128";    // nf-fa-question-circle (帮助)
+constexpr const char* INFO_CIRCLE = "\uf05a";        // nf-fa-info-circle (信息)
+constexpr const char* BELL = "\uf0f3";               // nf-fa-bell (通知)
+constexpr const char* FLAG = "\uf024";               // nf-fa-flag (标记)
+
+// 导航和方向
+constexpr const char* CHEVRON_LEFT = "\uf053";       // nf-fa-chevron-left (左箭头)
+constexpr const char* CHEVRON_RIGHT = "\uf054";      // nf-fa-chevron-right (右箭头)
+constexpr const char* CHEVRON_UP = "\uf077";         // nf-fa-chevron-up (上箭头)
+constexpr const char* CHEVRON_DOWN = "\uf078";       // nf-fa-chevron-down (下箭头)
+constexpr const char* ARROW_CIRCLE_LEFT = "\uf0a8";  // nf-fa-arrow-circle-left (左圆箭头)
+constexpr const char* ARROW_CIRCLE_RIGHT = "\uf0a9"; // nf-fa-arrow-circle-right (右圆箭头)
+constexpr const char* ARROW_CIRCLE_UP = "\uf0aa";    // nf-fa-arrow-circle-up (上圆箭头)
+constexpr const char* ARROW_CIRCLE_DOWN = "\uf0ab";  // nf-fa-arrow-circle-down (下圆箭头)
+
+// 文件和文件夹操作
+constexpr const char* FOLDER_PLUS = "\uf07b"; // nf-fa-folder (新建文件夹)
+constexpr const char* FILE_PLUS = "\uf016";   // nf-fa-file-o (新建文件)
+constexpr const char* FILE_EDIT = "\uf044";   // nf-fa-edit (编辑文件)
+constexpr const char* FILE_REMOVE = "\uf014"; // nf-fa-trash-o (删除文件)
+constexpr const char* FILE_COPY = "\uf0c5";   // nf-fa-files-o (复制文件)
+constexpr const char* FILE_MOVE = "\uf0b2";   // nf-fa-arrows (移动文件)
+constexpr const char* FILE_RENAME = "\uf044"; // nf-fa-edit (重命名)
+
+// 搜索和过滤
+constexpr const char* SEARCH_PLUS = "\uf00e";  // nf-fa-search-plus (放大搜索)
+constexpr const char* SEARCH_MINUS = "\uf010"; // nf-fa-search-minus (缩小搜索)
+constexpr const char* FILTER = "\uf0b0";       // nf-fa-filter (过滤)
+
+// 编辑操作
+constexpr const char* PENCIL = "\uf040";   // nf-fa-pencil (铅笔)
+constexpr const char* ERASER = "\uf12d";   // nf-fa-eraser (橡皮)
+constexpr const char* SCISSORS = "\uf0c4"; // nf-fa-scissors (剪刀)
+
+// 时间相关
+constexpr const char* CALENDAR = "\uf073";      // nf-fa-calendar (日历)
+constexpr const char* CALENDAR_PLUS = "\uf271"; // nf-fa-calendar-plus-o (添加日程)
+
+// 用户和权限
+constexpr const char* USER = "\uf007";   // nf-fa-user (用户)
+constexpr const char* USERS = "\uf0c0";  // nf-fa-users (用户组)
+constexpr const char* UNLOCK = "\uf09c"; // nf-fa-unlock (解锁)
+
+// 系统和设置
+constexpr const char* COGS = "\uf085";   // nf-fa-cogs (高级设置)
+constexpr const char* WRENCH = "\uf0ad"; // nf-fa-wrench (工具)
+constexpr const char* GEAR = "\uf013";   // nf-fa-cog (齿轮)
+
+// 网络和连接
+constexpr const char* WIFI = "\uf1eb";   // nf-fa-wifi (WiFi)
+constexpr const char* GLOBE = "\uf0ac";  // nf-fa-globe (网络)
+constexpr const char* LINK = "\uf0c1";   // nf-fa-link (链接)
+constexpr const char* UNLINK = "\uf127"; // nf-fa-unlink (断开链接)
+
+// 数据库和存储
+constexpr const char* HDD = "\uf0a0";      // nf-fa-hdd-o (硬盘)
+constexpr const char* DOWNLOAD = "\uf019"; // nf-fa-download (下载)
+constexpr const char* UPLOAD = "\uf093";   // nf-fa-upload (上传)
+
 // 欢迎界面
 constexpr const char* ROCKET = "\uf135"; // nf-fa-rocket (快速开始)
 constexpr const char* STAR = "\uf005";   // nf-fa-star (特性)

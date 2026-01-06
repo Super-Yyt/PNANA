@@ -1,4 +1,5 @@
 #include "ui/terminal_ui.h"
+#include "features/terminal/terminal_color.h"
 #include "ui/icons.h"
 #include <algorithm>
 #include <cstring>
@@ -9,6 +10,115 @@ using namespace ftxui;
 
 namespace pnana {
 namespace ui {
+
+// 解析并渲染带样式的历史命令提示符
+Element renderStyledPrompt(const std::string& command_line, features::Terminal& terminal) {
+    auto& theme = terminal.getTheme();
+    auto& colors = theme.getColors();
+
+    Elements elements;
+
+    // 查找箭头 " → " 的位置，这标志着提示符的结束
+    size_t arrow_pos = command_line.find(" → ");
+    if (arrow_pos == std::string::npos) {
+        // 如果没有找到箭头，当作普通文本处理
+        return text(command_line) | color(Color::Green);
+    }
+
+    std::string prompt_part = command_line.substr(0, arrow_pos);
+    std::string command_part = command_line.substr(arrow_pos + 3); // 跳过 " → "
+
+    // 解析提示符的各个部分（用 " · " 分隔）
+    std::vector<std::string> prompt_parts;
+    size_t start = 0;
+    size_t pos = 0;
+
+    while ((pos = prompt_part.find(" · ", start)) != std::string::npos) {
+        prompt_parts.push_back(prompt_part.substr(start, pos - start));
+        start = pos + 3; // 跳过 " · "
+    }
+    // 添加最后一个部分
+    if (start < prompt_part.length()) {
+        prompt_parts.push_back(prompt_part.substr(start));
+    }
+
+    // 如果解析失败，当作普通文本处理
+    if (prompt_parts.size() < 3) {
+        return text(command_line) | color(Color::Green);
+    }
+
+    // 第一部分：用户信息（用户名@主机名）
+    if (!prompt_parts.empty()) {
+        std::string user_host = prompt_parts[0];
+
+        // 终端图标
+        elements.push_back(text(std::string(" ") + icons::TERMINAL + " ") | bgcolor(Color::Green) |
+                           color(Color::Black) | bold);
+
+        // 用户名@主机名
+        elements.push_back(text(" " + user_host + " ") | bgcolor(Color::Green) |
+                           color(Color::Black) | bold);
+
+        // 分隔符
+        elements.push_back(text(" ") | bgcolor(colors.background));
+    }
+
+    // 第二部分：目录信息（调整顺序，与输入提示符一致）
+    if (prompt_parts.size() >= 3) {
+        std::string dir = prompt_parts[2];
+
+        elements.push_back(text(std::string(" ") + icons::FOLDER + " ") | bgcolor(Color::Blue) |
+                           color(Color::White) | bold);
+
+        elements.push_back(text(" " + dir + " ") | bgcolor(Color::Blue) | color(Color::White) |
+                           bold);
+
+        // 分隔符
+        elements.push_back(text(" ") | bgcolor(colors.background));
+    }
+
+    // 第三部分：时间戳（调整到目录之后）
+    if (prompt_parts.size() >= 2) {
+        std::string time_str = prompt_parts[1];
+
+        elements.push_back(text(std::string(" ") + icons::CLOCK + " ") | bgcolor(Color::Cyan) |
+                           color(Color::Black) | bold);
+
+        elements.push_back(text(" " + time_str + " ") | bgcolor(Color::Cyan) | color(Color::Black));
+    }
+
+    // 第四部分：Git 分支（如果存在）
+    if (prompt_parts.size() >= 4) {
+        std::string git_part = prompt_parts[3];
+        if (git_part.find("git:") == 0) {
+            std::string git_branch = git_part.substr(4); // 移除 "git:" 前缀
+
+            elements.push_back(text(" ") | bgcolor(colors.background));
+
+            elements.push_back(text(std::string(" ") + icons::GIT + " ") | bgcolor(Color::Yellow) |
+                               color(Color::Black) | bold);
+
+            elements.push_back(text(" " + git_branch + " ") | bgcolor(Color::Yellow) |
+                               color(Color::Black) | bold);
+        }
+    }
+
+    // 分隔符
+    elements.push_back(text(" ") | bgcolor(colors.background));
+
+    // 状态指示器（历史命令默认成功状态）
+    elements.push_back(text(" " + std::string(icons::SUCCESS) + " ") | bgcolor(Color::Green) |
+                       color(Color::White) | bold);
+
+    // 最终的提示符箭头
+    elements.push_back(text(" ") | bgcolor(colors.background));
+    elements.push_back(text(std::string(icons::ARROW_RIGHT) + " ") | color(Color::Green) | bold);
+
+    // 命令部分
+    elements.push_back(text(command_part) | color(Color::White));
+
+    return hbox(elements);
+}
 
 Element renderTerminal(features::Terminal& terminal, int height) {
     if (!terminal.isVisible()) {
@@ -59,15 +169,18 @@ Element renderTerminal(features::Terminal& terminal, int height) {
          i < output_lines_data.size() && (i - start_line) < static_cast<size_t>(available_height);
          ++i) {
         const auto& line = output_lines_data[i];
-        Color line_color;
         if (line.is_command) {
-            // 命令使用绿色（类似bash/zsh）
-            line_color = Color::Green;
+            // 命令行：解析并渲染带样式的提示符
+            output_lines.push_back(renderStyledPrompt(line.content, terminal));
         } else {
-            // 输出使用前景色
-            line_color = colors.foreground;
+            // 输出行：如果包含ANSI颜色码，使用颜色解析器，否则使用普通文本
+            if (line.has_ansi_colors) {
+                output_lines.push_back(
+                    pnana::features::terminal::AnsiColorParser::parse(line.content));
+            } else {
+                output_lines.push_back(text(line.content) | color(colors.foreground));
+            }
         }
-        output_lines.push_back(text(line.content) | color(line_color));
     }
 
     // 输入行 - 始终固定在最后一行（确保始终可见）

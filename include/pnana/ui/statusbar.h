@@ -21,7 +21,8 @@ class Statusbar {
                           const std::string& file_type, const std::string& message = "",
                           const std::string& region_name = "", bool syntax_highlighting = true,
                           bool has_selection = false, size_t selection_length = 0,
-                          const std::string& git_branch = "", int git_uncommitted_count = 0);
+                          const std::string& git_branch = "", int git_uncommitted_count = 0,
+                          const std::string& ssh_host = "", const std::string& ssh_user = "");
 
     // Git相关方法（公共接口）
     static std::tuple<std::string, int> getGitInfo();
