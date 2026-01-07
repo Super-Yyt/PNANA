@@ -190,23 +190,66 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
             cmake \
             ninja-build \
-            libgtest-dev \
-            libgmock-dev \
-            libjsoncpp-dev \
-            libcurl4-openssl-dev \
-            libssl-dev \
+            build-essential \
             pkg-config \
             dpkg-dev \
             rpm \
-            libarchive-tools
+            libarchive-tools \
+            git \
+            ccache
+
+      - name: Build and install FTXUI
+        run: |
+          git clone --depth 1 --branch main \
+            https://github.com/ArthurSonzogni/FTXUI.git
+          cd FTXUI
+          mkdir build && cd build
+          cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DFTXUI_BUILD_EXAMPLES=OFF \
+            -DFTXUI_BUILD_DOCS=OFF \
+            -DFTXUI_ENABLE_INSTALL=ON
+          make -j$(nproc)
+          sudo make install
+          cd ../..
+          rm -rf FTXUI
+
+      - name: Setup environment
+        run: |
+          echo "CMAKE_GENERATOR=Ninja" >> $GITHUB_ENV
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build
+          cd build
+          cmake .. \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_PREFIX_PATH=/usr/local \
+            -DBUILD_IMAGE_PREVIEW=OFF \
+            -DBUILD_TREE_SITTER=OFF \
+            -DBUILD_LUA=OFF \
+            -DBUILD_GO=OFF
 
       - name: Build project
         run: |
-          chmod +x ./build.sh
-          ./build.sh --clean
+          cd build
+          ninja -j$(nproc)
+
+      - name: Show ccache stats
+        run: ccache -s
 
       - name: Create DEB package
         if: matrix.package_type == 'deb'
