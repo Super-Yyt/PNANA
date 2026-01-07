@@ -740,15 +740,27 @@ void Editor::indentLine() {
     bool at_line_start = (cursor_col_ == 0) ||
                          (first_non_space != std::string::npos && cursor_col_ <= first_non_space);
 
+    std::string inserted_text = "    "; // 4个空格
+
     if (at_line_start) {
         // 在行首插入4个空格（缩进整行）
-        line = "    " + line;
+        doc->insertText(cursor_row_, 0, inserted_text);
         cursor_col_ += 4;
     } else {
         // 在光标位置插入4个空格
-        line.insert(cursor_col_, "    ");
+        doc->insertText(cursor_row_, cursor_col_, inserted_text);
         cursor_col_ += 4;
     }
+
+    // 记录变更到撤销系统（LSP支持）
+#ifdef BUILD_LSP_SUPPORT
+    if (lsp_enabled_ && document_change_tracker_) {
+        LOG("[EDIT] Recording indent change to document_change_tracker_");
+        document_change_tracker_->recordInsert(
+            static_cast<int>(cursor_row_), static_cast<int>(at_line_start ? 0 : cursor_col_ - 4),
+            inserted_text);
+    }
+#endif
 
     doc->setModified(true);
 
@@ -756,7 +768,12 @@ void Editor::indentLine() {
 }
 
 void Editor::unindentLine() {
-    auto& lines = getCurrentDocument()->getLines();
+    Document* doc = getCurrentDocument();
+    if (!doc) {
+        return;
+    }
+
+    auto& lines = doc->getLines();
     if (cursor_row_ >= lines.size())
         return;
 
@@ -769,13 +786,27 @@ void Editor::unindentLine() {
     }
 
     if (spaces_to_remove > 0) {
-        line = line.substr(spaces_to_remove);
+        // 使用deleteChar方法逐个删除，这样会自动记录到撤销系统
+        for (size_t i = 0; i < spaces_to_remove; ++i) {
+            doc->deleteChar(cursor_row_, 0);
+        }
+
         if (cursor_col_ >= spaces_to_remove) {
             cursor_col_ -= spaces_to_remove;
         } else {
             cursor_col_ = 0;
         }
-        getCurrentDocument()->setModified(true);
+
+        // LSP变更记录
+#ifdef BUILD_LSP_SUPPORT
+        if (lsp_enabled_ && document_change_tracker_) {
+            LOG("[EDIT] Recording unindent change to document_change_tracker_");
+            document_change_tracker_->recordDelete(static_cast<int>(cursor_row_), 0,
+                                                   static_cast<int>(spaces_to_remove));
+        }
+#endif
+
+        doc->setModified(true);
     }
 }
 

@@ -59,16 +59,11 @@ void Editor::handleInput(Event event) {
     // 使用新的输入处理系统
     using namespace pnana::input;
 
-    // 检查是否是 Tab 键
-    if (event == Event::Tab) {
-        LOG("=== Tab key pressed ===");
-        LOG("Current region: " + region_manager_.getRegionName());
-        LOG("File browser visible: " + std::string(file_browser_.isVisible() ? "true" : "false"));
-        LOG("Command palette open: " + std::string(command_palette_.isOpen() ? "true" : "false"));
-        Document* doc = getCurrentDocument();
-        LOG("Current document: " + std::string(doc ? doc->getFileName() : "null"));
-        LOG("Cursor position: row=" + std::to_string(cursor_row_) +
-            ", col=" + std::to_string(cursor_col_));
+    // 如果文件选择器可见且按下Tab键，直接交给文件选择器处理
+    if (file_picker_.isVisible() && (event == Event::Tab || event == Event::Character('\t'))) {
+        if (file_picker_.handleInput(event)) {
+            return;
+        }
     }
 
     // 调试信息：检查 Ctrl+P 事件
@@ -83,25 +78,6 @@ void Editor::handleInput(Event event) {
         LOG("[DEBUG COPY] After getAction, action: " + std::to_string(static_cast<int>(action)) +
             " (COPY=" + std::to_string(static_cast<int>(KeyAction::COPY)) +
             ", UNKNOWN=" + std::to_string(static_cast<int>(KeyAction::UNKNOWN)) + ")");
-    }
-
-    if (event == Event::Tab) {
-        LOG("Tab key action resolved to: " + std::to_string(static_cast<int>(action)));
-        LOG("INDENT_LINE enum value: " + std::to_string(static_cast<int>(KeyAction::INDENT_LINE)));
-        LOG("UNKNOWN enum value: " + std::to_string(static_cast<int>(KeyAction::UNKNOWN)));
-
-        // 检查事件解析 - 直接查找 "tab" 键
-        KeyAction tab_action = key_binding_manager_.getActionForKey("tab");
-        LOG("Direct lookup for 'tab' key: " + std::to_string(static_cast<int>(tab_action)));
-
-        // 检查键绑定映射表
-
-        if (action == KeyAction::UNKNOWN) {
-            LOG_ERROR("Tab key action is UNKNOWN! Event parsing may have failed.");
-            LOG_ERROR("Checking if event is actually Tab: " +
-                      std::string(event == Event::Tab ? "yes" : "no"));
-        } else if (action == KeyAction::INDENT_LINE) {
-        }
     }
 
     // Alt+A (另存为)、Alt+F (创建文件夹) 和 Alt+M (文件选择器) 应该能够在任何情况下工作
@@ -337,7 +313,7 @@ void Editor::handleInput(Event event) {
         }
     }
 
-    // 优先处理文件选择器输入
+    // 优先处理文件选择器输入（除了Tab键，Tab键已在前面处理）
     if (file_picker_.isVisible()) {
         if (file_picker_.handleInput(event)) {
             return;
