@@ -88,8 +88,10 @@ class SyntaxHighlighter {
     std::string current_file_type_;
     SyntaxHighlightBackend backend_;
 
+#ifdef BUILD_TREE_SITTER_SUPPORT
     // Tree-sitter 后端（如果可用）
     std::unique_ptr<SyntaxHighlighterTreeSitter> tree_sitter_highlighter_;
+#endif
 
     // 原有实现的数据成员
     std::map<std::string, std::vector<std::string>> keywords_;
