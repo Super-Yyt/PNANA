@@ -135,12 +135,28 @@ jobs:
           sudo apt-get install -f  # If there are dependency issues
           \`\`\`
 
-          ### Generic Linux (.tar.gz)
+          ### Red Hat/Fedora/CentOS (.rpm)
           \`\`\`bash
           wget https://github.com/${{ github.repository }}/releases/download/\
+            v${VERSION}/pnana_${VERSION}_x86_64.rpm
+          sudo rpm -i pnana_${VERSION}_x86_64.rpm
+          \`\`\`
+
+          ### Generic Linux
+          Choose the appropriate archive for your system:
+          - \`.tar.gz\` (gzip compressed)
+          - \`.tar.xz\` (xz compressed)
+          - \`.tar.bz2\` (bzip2 compressed)
+          - \`.zip\` (zip compressed)
+
+          \`\`\`bash
+          # Download the appropriate archive
+          wget https://github.com/${{ github.repository }}/releases/download/\
             v${VERSION}/pnana-ubuntu22.04.tar.gz
+
+          # Extract and install
           tar -xzf pnana-ubuntu22.04.tar.gz
-          cd package
+          cd pnana-ubuntu22.04
           sudo ./install.sh
           \`\`\`
 
@@ -176,11 +192,24 @@ jobs:
     strategy:
       matrix:
         include:
-          - package_type: deb
-            package_name: "pnana_${{ needs.prepare-release.outputs.version }}_\
-              amd64.deb"
-          - package_type: tar.gz
+          - package_type: DEB
+            package_name: "pnana_${{ needs.prepare-release.outputs.version }}_amd64.deb"
+            cpack_generator: "DEB"
+          - package_type: RPM
+            package_name: "pnana_${{ needs.prepare-release.outputs.version }}_x86_64.rpm"
+            cpack_generator: "RPM"
+          - package_type: TGZ
             package_name: "pnana-ubuntu22.04.tar.gz"
+            cpack_generator: "TGZ"
+          - package_type: ZIP
+            package_name: "pnana-ubuntu22.04.zip"
+            cpack_generator: "ZIP"
+          - package_type: TXZ
+            package_name: "pnana-ubuntu22.04.tar.xz"
+            cpack_generator: "TXZ"
+          - package_type: TBZ2
+            package_name: "pnana-ubuntu22.04.tar.bz2"
+            cpack_generator: "TBZ2"
 
     steps:
       - name: Checkout code
@@ -251,25 +280,33 @@ jobs:
       - name: Show ccache stats
         run: ccache -s
 
-      - name: Create DEB package
-        if: matrix.package_type == 'deb'
+      - name: Create ${{ matrix.package_type }} package
         run: |
           cd build
-          cpack -G DEB
-          ls -la *.deb
+          echo "Creating ${{ matrix.package_type }} package with generator ${{ matrix.cpack_generator }}"
+          cpack -G ${{ matrix.cpack_generator }}
+          echo "Generated packages:"
+          ls -la *.deb *.rpm *.tar.gz *.zip *.tar.xz *.tar.bz2 2>/dev/null || true
 
-      - name: Create TAR.GZ package
-        if: matrix.package_type == 'tar.gz'
+      - name: Find and upload package
+        id: find-package
         run: |
           cd build
-          cpack -G TGZ
-          ls -la *.tar.gz
+          # Find the generated package file
+          PACKAGE_FILE=$(ls -1 *.deb *.rpm *.tar.gz *.zip *.tar.xz *.tar.bz2 2>/dev/null | head -1)
+          if [ -z "$PACKAGE_FILE" ]; then
+            echo "Error: No package file found"
+            ls -la
+            exit 1
+          fi
+          echo "Found package: $PACKAGE_FILE"
+          echo "package_file=$PACKAGE_FILE" >> $GITHUB_OUTPUT
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.package_name }}
-          path: build/${{ matrix.package_name }}
+          path: build/${{ steps.find-package.outputs.package_file }}
           retention-days: 30
 
   create-release:
@@ -288,7 +325,7 @@ jobs:
 
       - name: List downloaded artifacts
         run: |
-          find artifacts -type f -name "*.deb" -o -name "*.tar.gz" | head -10
+          find artifacts -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.tar.xz" -o -name "*.tar.bz2" \) | head -20
 
       - name: Create Git tag
         run: |
@@ -296,6 +333,12 @@ jobs:
           git config --local user.name "GitHub Action"
           git tag ${{ needs.prepare-release.outputs.tag_name }}
           git push origin ${{ needs.prepare-release.outputs.tag_name }}
+
+      - name: Create file list for release
+        run: |
+          # Create a list of all package files for the release
+          find artifacts -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.tar.xz" -o -name "*.tar.bz2" \) -exec echo {} \; > release_files.txt
+          cat release_files.txt
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v1
@@ -305,11 +348,7 @@ jobs:
           body: ${{ needs.prepare-release.outputs.release_notes }}
           draft: ${{ github.event.inputs.draft == 'true' }}
           prerelease: ${{ github.event.inputs.release_type != 'stable' }}
-          files: |
-            artifacts/pnana_${{ needs.prepare-release.outputs.version }}_\
-              amd64.deb/
-              pnana_${{ needs.prepare-release.outputs.version }}_amd64.deb
-            artifacts/pnana-ubuntu22.04.tar.gz/pnana-ubuntu22.04.tar.gz
+          files: release_files.txt
 
       - name: Update CHANGELOG.md after release
         if: github.event_name == 'push'
