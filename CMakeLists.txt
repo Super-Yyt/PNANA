@@ -18,6 +18,15 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 # 图片预览支持（手动启用，使用FFmpeg）
 option(BUILD_IMAGE_PREVIEW "Enable image preview support with FFmpeg" OFF)
 
+# Tree-sitter语法高亮支持（手动启用）
+option(BUILD_TREE_SITTER "Enable Tree-sitter syntax highlighting" OFF)
+
+# Lua插件系统支持（手动启用）
+option(BUILD_LUA "Enable Lua plugin system" OFF)
+
+# Go SSH模块支持（手动启用）
+option(BUILD_GO "Enable Go SSH module" OFF)
+
 if(BUILD_IMAGE_PREVIEW)
     message(STATUS "Image preview support enabled - checking for FFmpeg...")
 
@@ -48,99 +57,128 @@ else()
     message(STATUS "  Requires: sudo apt install libavformat-dev libavcodec-dev libswscale-dev libavutil-dev")
 endif()
 
-# 查找 nlohmann/json (用于 LSP 支持)
-find_package(NlohmannJson QUIET)
+# 检查 nlohmann/json (本地第三方库，用于 LSP 支持)
+set(NLOHMANN_JSON_HEADER "${CMAKE_SOURCE_DIR}/third-party/nlohmann/json.hpp")
 
 # 检查 jsonrpccxx (本地第三方库)
 set(JSONRPCCXX_DIR "${CMAKE_SOURCE_DIR}/third-party/JSON-RPC-CXX")
 set(JSONRPCCXX_INCLUDE_DIR "${JSONRPCCXX_DIR}")
 
-# 如果找到 nlohmann/json 和 jsonrpccxx，启用 LSP 支持
-if(NlohmannJson_FOUND AND EXISTS "${JSONRPCCXX_INCLUDE_DIR}/jsonrpccxx/client.hpp")
+# 如果找到本地的 nlohmann/json 和 jsonrpccxx，启用 LSP 支持
+if(EXISTS "${NLOHMANN_JSON_HEADER}" AND EXISTS "${JSONRPCCXX_INCLUDE_DIR}/jsonrpccxx/client.hpp")
     set(BUILD_LSP_SUPPORT ON)
-    message(STATUS "nlohmann/json found at: ${NlohmannJson_INCLUDE_DIRS}")
-    if(NlohmannJson_VERSION)
-        message(STATUS "  Version: ${NlohmannJson_VERSION}")
-    endif()
+    set(NLOHMANN_JSON_FOUND ON)
+    message(STATUS "nlohmann/json found at: ${CMAKE_SOURCE_DIR}/third-party/nlohmann/json.hpp")
     message(STATUS "jsonrpccxx found at: ${JSONRPCCXX_INCLUDE_DIR}")
-    message(STATUS "LSP support enabled")
+    message(STATUS "LSP support enabled (using local third-party libraries)")
 else()
     set(BUILD_LSP_SUPPORT OFF)
-    if(NOT NlohmannJson_FOUND)
-        message(WARNING "nlohmann/json not found, LSP support disabled")
-        message(STATUS "  Install with: sudo apt install nlohmann-json3-dev")
+    set(NLOHMANN_JSON_FOUND OFF)
+    if(NOT EXISTS "${NLOHMANN_JSON_HEADER}")
+        message(WARNING "nlohmann/json not found at ${NLOHMANN_JSON_HEADER}, LSP support disabled")
+        message(STATUS "  To enable LSP support, ensure nlohmann/json.hpp exists in third-party/nlohmann/")
     endif()
     if(NOT EXISTS "${JSONRPCCXX_INCLUDE_DIR}/jsonrpccxx/client.hpp")
         message(WARNING "jsonrpccxx not found at ${JSONRPCCXX_INCLUDE_DIR}, LSP support disabled")
     endif()
 endif()
 
-# 查找 Lua 库
-find_package(PkgConfig QUIET)
-if(PkgConfig_FOUND)
-    message(STATUS "Checking for Lua with pkg-config...")
-    pkg_check_modules(LUA lua5.4 QUIET)
-    if(NOT LUA_FOUND)
-        message(STATUS "  lua5.4 not found, trying lua5.3...")
-        pkg_check_modules(LUA lua5.3 QUIET)
-    endif()
-    if(NOT LUA_FOUND)
-        message(STATUS "  lua5.3 not found, trying lua...")
-        pkg_check_modules(LUA lua QUIET)
-    endif()
-endif()
+# 配置 Lua 插件系统支持
+if(BUILD_LUA)
+    message(STATUS "Lua plugin system enabled - checking for Lua...")
 
-# 如果 pkg-config 没找到，尝试 find_library
-if(NOT LUA_FOUND)
-    message(STATUS "pkg-config didn't find Lua, trying find_library...")
-    find_library(LUA_LIBRARY
-        NAMES lua5.4 lua54 lua5.3 lua53 lua
-        PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib
-    )
-    find_path(LUA_INCLUDE_DIR
-        NAMES lua.h lualib.h lauxlib.h
-        PATHS /usr/include /usr/local/include
-        PATH_SUFFIXES lua5.4 lua54 lua5.3 lua53 lua
-    )
-    if(LUA_LIBRARY AND LUA_INCLUDE_DIR)
-        set(LUA_FOUND TRUE)
-        set(LUA_LIBRARIES ${LUA_LIBRARY})
-        set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
-        message(STATUS "  Found Lua library: ${LUA_LIBRARY}")
-        message(STATUS "  Found Lua includes: ${LUA_INCLUDE_DIR}")
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        message(STATUS "Checking for Lua with pkg-config...")
+        pkg_check_modules(LUA lua5.4 QUIET)
+        if(NOT LUA_FOUND)
+            message(STATUS "  lua5.4 not found, trying lua5.3...")
+            pkg_check_modules(LUA lua5.3 QUIET)
+        endif()
+        if(NOT LUA_FOUND)
+            message(STATUS "  lua5.3 not found, trying lua...")
+            pkg_check_modules(LUA lua QUIET)
+        endif()
+    endif()
+
+    # 如果 pkg-config 没找到，尝试 find_library
+    if(NOT LUA_FOUND)
+        message(STATUS "pkg-config didn't find Lua, trying find_library...")
+        find_library(LUA_LIBRARY
+            NAMES lua5.4 lua54 lua5.3 lua53 lua
+            PATHS /usr/lib /usr/lib/x86_64-linux-gnu /usr/local/lib
+        )
+        find_path(LUA_INCLUDE_DIR
+            NAMES lua.h lualib.h lauxlib.h
+            PATHS /usr/include /usr/local/include
+            PATH_SUFFIXES lua5.4 lua54 lua5.3 lua53 lua
+        )
+        if(LUA_LIBRARY AND LUA_INCLUDE_DIR)
+            set(LUA_FOUND TRUE)
+            set(LUA_LIBRARIES ${LUA_LIBRARY})
+            set(LUA_INCLUDE_DIRS ${LUA_INCLUDE_DIR})
+            message(STATUS "  Found Lua library: ${LUA_LIBRARY}")
+            message(STATUS "  Found Lua includes: ${LUA_INCLUDE_DIR}")
+        else()
+            if(NOT LUA_LIBRARY)
+                message(STATUS "  Lua library not found")
+            endif()
+            if(NOT LUA_INCLUDE_DIR)
+                message(STATUS "  Lua include directory not found")
+            endif()
+        endif()
+    endif()
+
+    if(LUA_FOUND)
+        set(BUILD_LUA_SUPPORT ON)
+        message(STATUS "✓ Lua found - plugin system enabled")
+        message(STATUS "  Libraries: ${LUA_LIBRARIES}")
+        message(STATUS "  Include dirs: ${LUA_INCLUDE_DIRS}")
     else()
-        if(NOT LUA_LIBRARY)
-            message(STATUS "  Lua library not found")
-        endif()
-        if(NOT LUA_INCLUDE_DIR)
-            message(STATUS "  Lua include directory not found")
-        endif()
+        set(BUILD_LUA_SUPPORT OFF)
+        message(FATAL_ERROR "✗ Lua not found but BUILD_LUA is enabled")
+        message(STATUS "  Install with: sudo apt install liblua5.4-dev (or liblua5.3-dev)")
+        message(STATUS "  Then run: rm -rf build && mkdir build && cd build && cmake -DBUILD_LUA=ON ..")
     endif()
-endif()
-
-if(LUA_FOUND)
-    set(BUILD_LUA_SUPPORT ON)
-    message(STATUS "✓ Lua found - plugin system enabled")
-    message(STATUS "  Libraries: ${LUA_LIBRARIES}")
-    message(STATUS "  Include dirs: ${LUA_INCLUDE_DIRS}")
 else()
     set(BUILD_LUA_SUPPORT OFF)
-    message(WARNING "✗ Lua not found, plugin system will be disabled")
-    message(STATUS "  Install with: sudo apt install liblua5.4-dev (or liblua5.3-dev)")
-    message(STATUS "  After installation, run: rm -rf build && mkdir build && cd build && cmake ..")
+    message(STATUS "Lua plugin system disabled (use -DBUILD_LUA=ON to enable)")
+    message(STATUS "  Requires: sudo apt install liblua5.4-dev (or liblua5.3-dev)")
 endif()
 
 # 配置 Tree-sitter（语法高亮）
-include(ConfigureTreeSitter)
-
-# 查找 Go 编译器
-find_program(GO_EXECUTABLE go)
-if(NOT GO_EXECUTABLE)
-    message(WARNING "Go compiler not found. SSH module will use fallback implementation.")
-    set(BUILD_GO_MODULE OFF)
+if(BUILD_TREE_SITTER)
+    message(STATUS "Tree-sitter syntax highlighting enabled - checking dependencies...")
+    include(ConfigureTreeSitter)
+    if(NOT BUILD_TREE_SITTER_SUPPORT)
+        message(FATAL_ERROR "✗ Tree-sitter not found but BUILD_TREE_SITTER is enabled")
+        message(STATUS "  Install with: sudo apt install libtree-sitter-dev")
+        message(STATUS "  Or build from source: https://github.com/tree-sitter/tree-sitter")
+        message(STATUS "  Then run: rm -rf build && mkdir build && cd build && cmake -DBUILD_TREE_SITTER=ON ..")
+    endif()
 else()
-    set(BUILD_GO_MODULE ON)
-    message(STATUS "Found Go: ${GO_EXECUTABLE}")
+    set(BUILD_TREE_SITTER_SUPPORT OFF)
+    message(STATUS "Tree-sitter syntax highlighting disabled (use -DBUILD_TREE_SITTER=ON to enable)")
+    message(STATUS "  Requires: sudo apt install libtree-sitter-dev")
+endif()
+
+# 配置 Go SSH 模块支持
+if(BUILD_GO)
+    message(STATUS "Go SSH module enabled - checking for Go compiler...")
+
+    find_program(GO_EXECUTABLE go)
+    if(NOT GO_EXECUTABLE)
+        message(FATAL_ERROR "✗ Go compiler not found but BUILD_GO is enabled")
+        message(STATUS "  Install with: sudo apt install golang-go")
+        message(STATUS "  Then run: rm -rf build && mkdir build && cd build && cmake -DBUILD_GO=ON ..")
+    else()
+        set(BUILD_GO_MODULE ON)
+        message(STATUS "✓ Found Go: ${GO_EXECUTABLE}")
+    endif()
+else()
+    set(BUILD_GO_MODULE OFF)
+    message(STATUS "Go SSH module disabled (use -DBUILD_GO=ON to enable)")
+    message(STATUS "  Requires: sudo apt install golang-go")
 endif()
 
 # 包含目录
@@ -407,7 +445,7 @@ if(BUILD_GO_MODULE)
     
     message(STATUS "Go SSH module will be built and linked")
 else()
-    message(WARNING "Go SSH module will not be built. SSH functionality may be limited.")
+    message(STATUS "Go SSH module will not be built. SSH functionality may be limited.")
 endif()
 
 # 链接FTXUI库
@@ -425,23 +463,18 @@ if(BUILD_IMAGE_PREVIEW_SUPPORT)
     target_compile_definitions(pnana PRIVATE BUILD_IMAGE_PREVIEW_SUPPORT)
 endif()
 
-# 链接 jsonrpccxx 和 nlohmann/json (如果启用 LSP 支持)
+# 包含 jsonrpccxx 和 nlohmann/json (如果启用 LSP 支持)
 if(BUILD_LSP_SUPPORT)
-    # 添加 jsonrpccxx 的包含目录
-    target_include_directories(pnana PRIVATE 
+    # 添加 jsonrpccxx 和 nlohmann/json 的包含目录
+    target_include_directories(pnana PRIVATE
         ${JSONRPCCXX_INCLUDE_DIR}
+        ${CMAKE_SOURCE_DIR}/third-party
     )
-    
-    # 链接 nlohmann/json（如果使用导入目标）
-    if(TARGET NlohmannJson::json)
-        target_link_libraries(pnana PRIVATE NlohmannJson::json)
-    else()
-        # 回退到直接包含目录
-        target_include_directories(pnana PRIVATE ${NlohmannJson_INCLUDE_DIRS})
-    endif()
-    
+
     target_compile_definitions(pnana PRIVATE BUILD_LSP_SUPPORT)
-    message(STATUS "LSP support configured with jsonrpccxx and nlohmann/json")
+    message(STATUS "LSP support configured with local third-party libraries")
+    message(STATUS "  jsonrpccxx: ${JSONRPCCXX_INCLUDE_DIR}")
+    message(STATUS "  nlohmann/json: ${CMAKE_SOURCE_DIR}/third-party/nlohmann/json.hpp")
 endif()
 
 # 链接 Lua 库（如果启用插件系统）
@@ -466,6 +499,12 @@ set_target_properties(pnana PROPERTIES
 install(FILES config/default_config.json
         DESTINATION share/pnana
         OPTIONAL)
+
+# 安装打包安装脚本
+install(PROGRAMS ${CMAKE_BINARY_DIR}/package_install.sh
+        DESTINATION .
+        RENAME install.sh
+        COMPONENT pnana)
 
 # 安装插件到系统目录（作为模板）
 if(EXISTS "${CMAKE_SOURCE_DIR}/plugins")
@@ -550,8 +589,22 @@ configure_file(
     @ONLY
 )
 
+# 为打包文件生成简化的安装脚本
+configure_file(
+    ${CMAKE_SOURCE_DIR}/cmake/package_install.sh.in
+    ${CMAKE_BINARY_DIR}/package_install.sh
+    @ONLY
+)
+
 # 设置安装脚本为可执行
 file(CHMOD ${CMAKE_BINARY_DIR}/install.sh
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                GROUP_READ GROUP_EXECUTE
+                WORLD_READ WORLD_EXECUTE
+)
+
+# 设置打包安装脚本为可执行
+file(CHMOD ${CMAKE_BINARY_DIR}/package_install.sh
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                 GROUP_READ GROUP_EXECUTE
                 WORLD_READ WORLD_EXECUTE
