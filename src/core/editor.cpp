@@ -47,7 +47,11 @@ Editor::Editor()
       input_buffer_(""),
       status_message_(
           "pnana - Modern Terminal Editor | Ctrl+Q Quit | Ctrl+T Themes | Ctrl+O Files | F1 Help"),
-      should_quit_(false), force_ui_update_(false), screen_(ScreenInteractive::Fullscreen()) {
+      should_quit_(false), force_ui_update_(false), render_call_count_(0), undo_operation_count_(0),
+      last_debug_stats_time_(std::chrono::steady_clock::now()), rendering_paused_(false),
+      needs_render_(false), last_call_time_(std::chrono::steady_clock::now()),
+      last_render_time_(std::chrono::steady_clock::now()), pending_cursor_update_(false),
+      screen_(ScreenInteractive::Fullscreen()) {
     // 加载配置文件（使用默认路径）
     loadConfig();
 
@@ -1577,6 +1581,51 @@ int Editor::getScreenHeight() const {
 
 int Editor::getScreenWidth() const {
     return screen_.dimx();
+}
+
+// 渲染批处理控制实现（方案1）
+void Editor::pauseRendering() {
+    rendering_paused_ = true;
+}
+
+void Editor::resumeRendering() {
+    rendering_paused_ = false;
+
+    if (needs_render_ || pending_cursor_update_) {
+        needs_render_ = false;
+        pending_cursor_update_ = false;
+        screen_.PostEvent(Event::Custom); // 手动触发渲染更新
+    }
+}
+
+// 强制触发待处理的光标更新
+void Editor::triggerPendingCursorUpdate() {
+    if (pending_cursor_update_ && !rendering_paused_) {
+        LOG("[DEBUG INCREMENTAL] Triggering pending cursor update");
+        pending_cursor_update_ = false;
+        screen_.PostEvent(Event::Custom);
+    }
+}
+
+// 获取调用栈信息（简化版，用于调试）
+std::string Editor::getCallStackInfo() {
+    // 由于C++没有简单的栈追踪，这里用时间戳和状态来标识调用来源
+    static std::chrono::steady_clock::time_point last_call_time;
+    auto now = std::chrono::steady_clock::now();
+    auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_call_time);
+    last_call_time = now;
+
+    std::string info = "time_diff=" + std::to_string(time_diff.count()) + "ms";
+
+    // 添加当前状态信息
+    if (rendering_paused_) {
+        info += ", paused=true";
+    }
+    if (needs_render_) {
+        info += ", needs_render=true";
+    }
+
+    return info;
 }
 
 } // namespace core

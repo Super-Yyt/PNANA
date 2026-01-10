@@ -360,7 +360,7 @@ void Document::replaceLine(size_t row, const std::string& content) {
     pushChange(DocumentChange(DocumentChange::Type::REPLACE, row, 0, old_content, content));
 }
 
-bool Document::undo(size_t* out_row, size_t* out_col) {
+bool Document::undo(size_t* out_row, size_t* out_col, DocumentChange::Type* out_type) {
     if (undo_stack_.empty()) {
         return false;
     }
@@ -579,6 +579,11 @@ bool Document::undo(size_t* out_row, size_t* out_col) {
 
     // 将操作移到重做栈
     redo_stack_.push_back(change);
+
+    // 返回操作类型（用于智能光标定位）
+    if (out_type) {
+        *out_type = change.type;
+    }
 
     // VSCode 行为：如果撤销到最初状态（撤销栈为空），清除修改状态
     if (undo_stack_.empty()) {

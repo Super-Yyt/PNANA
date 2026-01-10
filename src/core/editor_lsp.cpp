@@ -25,6 +25,61 @@ namespace core {
 
 #ifdef BUILD_LSP_SUPPORT
 
+// LSP 补全上下文分析辅助函数
+std::string Editor::getSemanticContext(const std::string& line_content, size_t cursor_pos) {
+    // 简单的语义上下文分析
+    // 检查光标前面的内容，判断是在函数内、类内等
+
+    if (cursor_pos == 0) {
+        return "global";
+    }
+
+    // 查找最近的函数或类定义
+    std::string before_cursor = line_content.substr(0, cursor_pos);
+    std::reverse(before_cursor.begin(), before_cursor.end());
+
+    // 检查是否在函数内（查找最近的'('）
+    size_t paren_pos = before_cursor.find('(');
+    if (paren_pos != std::string::npos && paren_pos < 100) { // 在最近100个字符内
+        return "function";
+    }
+
+    // 检查是否在类内（查找最近的'class'或'struct'）
+    size_t class_pos = before_cursor.find("ssalc");   // "class" reversed
+    size_t struct_pos = before_cursor.find("tcurts"); // "struct" reversed
+    if (class_pos != std::string::npos || struct_pos != std::string::npos) {
+        return "class";
+    }
+
+    return "global";
+}
+
+std::string Editor::getTriggerCharacter(const std::string& line_content, size_t cursor_pos) {
+    // 分析触发字符
+    if (cursor_pos == 0) {
+        return "";
+    }
+
+    // 检查光标前一个字符
+    char prev_char = line_content[cursor_pos - 1];
+
+    // LSP 常见的触发字符
+    if (prev_char == '.' || prev_char == ':' || prev_char == '>' || prev_char == '/' ||
+        prev_char == '\\') {
+        return std::string(1, prev_char);
+    }
+
+    // 检查双字符触发符
+    if (cursor_pos >= 2) {
+        std::string prev_two = line_content.substr(cursor_pos - 2, 2);
+        if (prev_two == "::" || prev_two == "->" || prev_two == "?.") {
+            return prev_two;
+        }
+    }
+
+    return "";
+}
+
 void Editor::initializeLsp() {
     // 创建 LSP 服务器管理器
     lsp_manager_ = std::make_unique<features::LspServerManager>();
@@ -80,6 +135,9 @@ void Editor::initializeLsp() {
     lsp_request_manager_ = std::make_unique<features::LspRequestManager>();
     lsp_worker_pool_ =
         std::make_unique<features::LspWorkerPool>(std::thread::hardware_concurrency());
+
+    // 初始化代码片段管理器
+    snippet_manager_ = std::make_unique<features::SnippetManager>();
 
     lsp_enabled_ = true;
     setStatusMessage("LSP manager initialized");
@@ -445,86 +503,35 @@ void Editor::updateLspDocument() {
 
         // 检查是否已经打开过
         if (file_language_map_.find(uri) == file_language_map_.end()) {
-            // 首次打开，发送 didOpen（异步以避免阻塞 UI）
-            if (lsp_request_manager_) {
-                std::string uri_copy = uri;
-                std::string language_copy = language_id;
-                std::string content_copy = content;
-                lsp_request_manager_->postOrReplace(
-                    "didOpen:" + uri_copy, features::LspRequestManager::Priority::NORMAL,
-                    [client, uri_copy, language_copy, content_copy]() mutable {
-                        client->didOpen(uri_copy, language_copy, content_copy);
-                    });
-            } else {
-                std::thread([client, uri, language_id, content]() {
-                    try {
-                        client->didOpen(uri, language_id, content);
-                    } catch (...) {
-                    }
-                }).detach();
+            // 首次打开，发送 didOpen（同步发送以确保文档被正确添加）
+            LOG("[LSP_UPDATE] Sending didOpen for new document: " + uri);
+            try {
+                client->didOpen(uri, language_id, content);
+                LOG("[LSP_UPDATE] didOpen sent successfully");
+            } catch (const std::exception& e) {
+                LOG_ERROR("[LSP_UPDATE] didOpen failed: " + std::string(e.what()));
             }
             file_language_map_[uri] = language_id;
         } else {
-            // 已打开，发送 didChange
-            // 使用待处理的版本号，如果没有则从1开始
-            int version = pending_document_version_ > 0 ? pending_document_version_ : 1;
+            // 已打开，发送 didChange - 使用全量更新以确保可靠性
+            LOG("[LSP_UPDATE] Sending didChange for existing document: " + uri);
+            int version = pending_document_version_ > 0 ? pending_document_version_ : 2;
             pending_document_version_ = version + 1;
-            // 使用增量更新
-            if (document_change_tracker_ && document_change_tracker_->hasChanges()) {
-                auto changes = document_change_tracker_->getChanges();
-                if (!changes.empty() && !changes[0].text.empty()) {
-                    // 使用增量更新：异步提交到请求管理器以避免阻塞 UI
-                    auto changes_copy = changes; // copy for lambda
-                    auto client_ptr = client;
-                    auto uri_copy = uri;
-                    int ver = version;
-                    lsp_request_manager_->postOrReplace(
-                        "didChange:" + uri_copy, features::LspRequestManager::Priority::NORMAL,
-                        [client_ptr, uri_copy, changes_copy, ver]() mutable {
-                            client_ptr->didChangeIncremental(uri_copy, changes_copy, ver);
-                        });
-                    document_change_tracker_->clear();
-                } else {
-                    // 回退到全量更新，同样异步
-                    auto client_ptr = client;
-                    auto uri_copy = uri;
-                    int ver = version;
-                    auto content_copy = content;
-                    lsp_request_manager_->postOrReplace(
-                        "didChangeFull:" + uri_copy, features::LspRequestManager::Priority::NORMAL,
-                        [client_ptr, uri_copy, content_copy, ver]() mutable {
-                            client_ptr->didChange(uri_copy, content_copy, ver);
-                        });
-                    document_change_tracker_->clear();
-                }
-            } else {
-                // 没有变更记录，使用全量更新（异步以避免阻塞 UI）
-                if (lsp_request_manager_) {
-                    auto client_ptr = client;
-                    auto uri_copy = uri;
-                    int ver = version;
-                    auto content_copy = content;
-                    lsp_request_manager_->postOrReplace(
-                        "didChangeFull:" + uri_copy, features::LspRequestManager::Priority::NORMAL,
-                        [client_ptr, uri_copy, content_copy, ver]() mutable {
-                            client_ptr->didChange(uri_copy, content_copy, ver);
-                        });
-                } else {
-                    std::thread([client, uri, content, version]() {
-                        try {
-                            client->didChange(uri, content, version);
-                        } catch (...) {
-                        }
-                    }).detach();
-                }
-            }
 
-            // 注意：不清除补全缓存，因为：
-            // 1. 缓存键包含精确的位置信息，位置变化时自然无法命中
-            // 2. 缓存有过期时间（5分钟），会自动清理过期项
-            // 3. 频繁清空缓存会导致缓存命中率为0，影响性能
-            // 只在文档关闭或明确需要时才清空缓存
+            try {
+                client->didChange(uri, content, version);
+                LOG("[LSP_UPDATE] didChange sent successfully (version: " +
+                    std::to_string(version) + ")");
+            } catch (const std::exception& e) {
+                LOG_ERROR("[LSP_UPDATE] didChange failed: " + std::string(e.what()));
+            }
         }
+
+        // 注意：不清除补全缓存，因为：
+        // 1. 缓存键包含精确的位置信息，位置变化时自然无法命中
+        // 2. 缓存有过期时间（5分钟），会自动清理过期项
+        // 3. 频繁清空缓存会导致缓存命中率为0，影响性能
+        // 只在文档关闭或明确需要时才清空缓存
     } catch (const std::exception& e) {
         LOG_WARNING("updateLspDocument() exception: " + std::string(e.what()) +
                     " (LSP feature disabled for this file)");
@@ -538,6 +545,9 @@ void Editor::updateLspDocument() {
 }
 
 void Editor::triggerCompletion() {
+    // 开始时间追踪
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     // 补全项评分结构体
     struct ScoredItem {
         features::CompletionItem item;
@@ -579,10 +589,10 @@ void Editor::triggerCompletion() {
         LOG("[COMPLETION] Time since last trigger: " +
             std::to_string(time_since_last_trigger.count()) + "ms");
 
-        // 使用平衡的debounce时间（100ms），避免过于频繁的请求
-        if (time_since_last_trigger < std::chrono::milliseconds(100)) {
+        // 使用优化的debounce时间（50ms），提高响应速度但避免过于频繁的请求
+        if (time_since_last_trigger < std::chrono::milliseconds(50)) {
             LOG("[COMPLETION] Debounced: too frequent (" +
-                std::to_string(time_since_last_trigger.count()) + "ms < 100ms)");
+                std::to_string(time_since_last_trigger.count()) + "ms < 50ms)");
             return;
         }
 
@@ -590,6 +600,11 @@ void Editor::triggerCompletion() {
     }
 
     LOG("[COMPLETION] Passed debounce check, proceeding with completion");
+    auto debounce_check_time = std::chrono::high_resolution_clock::now();
+    auto debounce_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(debounce_check_time - start_time)
+            .count();
+    LOG("[COMPLETION] Time spent on debounce check: " + std::to_string(debounce_duration) + "ms");
 
     if (filepath.empty()) {
         // 如果文件未保存，使用临时路径
@@ -679,12 +694,31 @@ void Editor::triggerCompletion() {
         completion_cache_ = std::make_unique<features::LspCompletionCache>();
     }
 
-    // 简化的缓存检查 - 只检查当前位置的缓存
+    // 改进的缓存策略 - 基于前缀和语言ID，提高命中率
     features::LspCompletionCache::CacheKey cache_key;
     cache_key.uri = uri;
-    cache_key.line = static_cast<int>(cursor_row_);
-    cache_key.character = static_cast<int>(cursor_col_);
-    cache_key.prefix = ""; // 简化：不使用前缀匹配
+
+    // 获取当前行内容和前缀
+    std::string line_content = doc->getLine(cursor_row_);
+    std::string current_prefix = line_content.substr(0, cursor_col_);
+
+    // 找到最近的单词边界作为缓存key，避免位置依赖
+    size_t last_space = current_prefix.find_last_of(" \t.()[]{};:,");
+    if (last_space != std::string::npos && last_space < current_prefix.size() - 1) {
+        cache_key.context_prefix = current_prefix.substr(last_space + 1);
+    } else {
+        cache_key.context_prefix = current_prefix;
+    }
+
+    // 获取语言ID用于缓存区分
+    std::string language_id = detectLanguageId(filepath);
+    cache_key.semantic_context = language_id;
+
+    // 简化其他字段，减少缓存粒度
+    cache_key.line = 0;      // 不基于行号
+    cache_key.character = 0; // 不基于列号
+    cache_key.trigger_character = "";
+    cache_key.prefix = "";
 
     int screen_width = screen_.dimx();
     int screen_height = screen_.dimy();
@@ -705,27 +739,37 @@ void Editor::triggerCompletion() {
     }
 
     // 检查缓存
+    auto cache_check_start = std::chrono::high_resolution_clock::now();
     auto cached = completion_cache_->get(cache_key);
+    auto cache_check_time = std::chrono::high_resolution_clock::now();
+    auto cache_check_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(cache_check_time - cache_check_start)
+            .count();
+
     if (cached.has_value() && !cached->empty()) {
         LOG("[COMPLETION] Cache HIT: " + std::to_string(cached->size()) + " items");
+        LOG("[COMPLETION] Cache check time: " + std::to_string(cache_check_duration) + "ms");
         // 限制显示数量
         std::vector<features::CompletionItem> limited_items = *cached;
         if (limited_items.size() > 50) {
             limited_items.resize(50);
         }
         showCompletionPopupIfChanged(limited_items, static_cast<int>(cursor_row_),
-                                     cursor_screen_col, screen_width, screen_height);
+                                     cursor_screen_col, screen_width, screen_height, prefix);
         LOG("[COMPLETION] ===== triggerCompletion() END (from cache) =====");
         return;
     }
 
     LOG("[COMPLETION] Cache MISS - requesting from LSP server");
+    LOG("[COMPLETION] Cache check time: " + std::to_string(cache_check_duration) + "ms");
 
     // 使用异步管理器请求补全（参考VSCode：简单的异步处理）
     if (!lsp_async_manager_) {
         LOG("[COMPLETION] Creating new LspAsyncManager");
         lsp_async_manager_ = std::make_unique<features::LspAsyncManager>();
     }
+
+    // auto async_request_start = std::chrono::high_resolution_clock::now(); // 暂时未使用
 
     // 请求补全（非阻塞）
     int req_row = static_cast<int>(cursor_row_);
@@ -740,8 +784,8 @@ void Editor::triggerCompletion() {
     lsp_async_manager_->requestCompletionAsync(
         client, uri, pos,
         // on_success - 在主线程中更新UI
-        [this, cache_key, req_row, req_col, req_screen_w, req_screen_h,
-         request_start](const std::vector<features::CompletionItem>& items) {
+        [this, cache_key, req_row, req_col, req_screen_w, req_screen_h, request_start, prefix,
+         filepath](const std::vector<features::CompletionItem>& items) {
             auto callback_start = std::chrono::steady_clock::now();
             auto request_duration = std::chrono::duration_cast<std::chrono::milliseconds>(
                 callback_start - request_start);
@@ -750,7 +794,7 @@ void Editor::triggerCompletion() {
                 " items after " + std::to_string(request_duration.count()) + "ms");
 
             screen_.Post([this, items, cache_key, req_row, req_col, req_screen_w, req_screen_h,
-                          callback_start]() {
+                          callback_start, prefix, filepath]() {
                 auto ui_update_start = std::chrono::steady_clock::now();
 
                 // 缓存结果
@@ -762,17 +806,103 @@ void Editor::triggerCompletion() {
 
                 // 显示补全结果
                 if (!items.empty()) {
-                    std::vector<features::CompletionItem> limited = items;
+                    auto snippet_add_start = std::chrono::high_resolution_clock::now();
+                    std::vector<features::CompletionItem> all_items = items;
+
+                    // 添加代码片段到补全列表
+                    if (snippet_manager_) {
+                        std::string language_id = detectLanguageId(filepath);
+                        auto snippets = snippet_manager_->findMatchingSnippets(prefix, language_id);
+
+                        for (const auto& snippet : snippets) {
+                            features::CompletionItem snippet_item;
+                            snippet_item.label = snippet.prefix;
+                            snippet_item.kind = "snippet";
+                            snippet_item.detail = snippet.description;
+                            snippet_item.documentation = "Code snippet: " + snippet.description;
+                            snippet_item.isSnippet = true;
+                            snippet_item.snippet_body = snippet.body;
+                            snippet_item.snippet_placeholders = snippet.placeholders;
+
+                            all_items.push_back(snippet_item);
+                        }
+                    }
+
+                    auto snippet_add_end = std::chrono::high_resolution_clock::now();
+                    auto snippet_add_duration =
+                        std::chrono::duration_cast<std::chrono::milliseconds>(snippet_add_end -
+                                                                              snippet_add_start)
+                            .count();
+                    LOG("[COMPLETION] Snippet addition time: " +
+                        std::to_string(snippet_add_duration) + "ms");
+
+                    std::vector<features::CompletionItem> sorted_items = all_items;
+
+                    // 智能排序 - 基于多维度评分
+                    auto sort_start = std::chrono::steady_clock::now();
+                    std::sort(
+                        sorted_items.begin(), sorted_items.end(),
+                        [this, prefix = prefix](const features::CompletionItem& a,
+                                                const features::CompletionItem& b) {
+                            // 计算评分：相关性、使用频率、上下文匹配、类型优先级、位置接近度
+                            auto calculate_score =
+                                [this, prefix](const features::CompletionItem& item) -> int {
+                                int score = 0;
+
+                                // 1. 前缀匹配评分 (最高权重)
+                                if (!prefix.empty()) {
+                                    if (item.label.find(prefix) == 0) {
+                                        score += 100; // 完全匹配前缀
+                                    } else if (item.label.find(prefix) != std::string::npos) {
+                                        score += 50; // 包含前缀
+                                    }
+                                }
+
+                                // 2. 类型优先级评分
+                                if (item.kind == "method" || item.kind == "function") {
+                                    score += 30;
+                                } else if (item.kind == "variable" || item.kind == "property") {
+                                    score += 20;
+                                } else if (item.kind == "class" || item.kind == "interface") {
+                                    score += 40;
+                                }
+
+                                // 3. 长度评分（较短的通常更常用）
+                                if (item.label.length() <= 10) {
+                                    score += 10;
+                                } else if (item.label.length() <= 20) {
+                                    score += 5;
+                                }
+
+                                return score;
+                            };
+
+                            int score_a = calculate_score(a);
+                            int score_b = calculate_score(b);
+
+                            if (score_a != score_b) {
+                                return score_a > score_b; // 分数高的在前
+                            }
+
+                            return a.label < b.label; // 相同分数按字母顺序
+                        });
+                    auto sort_end = std::chrono::steady_clock::now();
+                    auto sort_time = std::chrono::duration_cast<std::chrono::microseconds>(
+                        sort_end - sort_start);
+                    LOG("[COMPLETION] Smart sorting completed in " +
+                        std::to_string(sort_time.count() / 1000.0) + " ms");
+
+                    std::vector<features::CompletionItem> limited = sorted_items;
                     if (limited.size() > 50) {
                         limited.resize(50);
-                        LOG("[COMPLETION] Limited items from " + std::to_string(items.size()) +
-                            " to 50");
+                        LOG("[COMPLETION] Limited items from " +
+                            std::to_string(sorted_items.size()) + " to 50");
                     }
 
                     LOG("[COMPLETION] Showing completion popup with " +
                         std::to_string(limited.size()) + " items");
                     showCompletionPopupIfChanged(limited, req_row, req_col, req_screen_w,
-                                                 req_screen_h);
+                                                 req_screen_h, prefix);
                 } else {
                     LOG("[COMPLETION] No completion items, hiding popup");
                     completion_popup_.hide();
@@ -799,7 +929,11 @@ void Editor::triggerCompletion() {
             });
         });
 
-    LOG("[COMPLETION] ===== triggerCompletion() END =====");
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto total_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    LOG("[COMPLETION] ===== triggerCompletion() TOTAL TIME: " + std::to_string(total_duration) +
+        "ms =====");
 }
 
 void Editor::handleCompletionInput(ftxui::Event event) {
@@ -820,6 +954,21 @@ void Editor::handleCompletionInput(ftxui::Event event) {
 
 void Editor::applyCompletion() {
     if (!completion_popup_.isVisible()) {
+        return;
+    }
+
+    // 检查是否是代码片段
+    const auto* selected_item = completion_popup_.getSelectedItem();
+    if (selected_item && selected_item->isSnippet && snippet_manager_) {
+        // 展开代码片段
+        features::Snippet snippet;
+        snippet.prefix = selected_item->label;
+        snippet.body = selected_item->snippet_body;
+        snippet.description = selected_item->detail;
+        snippet.placeholders = selected_item->snippet_placeholders;
+
+        snippet_manager_->expandSnippet(snippet, *this);
+        completion_popup_.hide();
         return;
     }
 
@@ -874,7 +1023,12 @@ ftxui::Element Editor::renderCompletionPopup() {
 
 // Helper to avoid showing completion popup repeatedly and causing flicker.
 void Editor::showCompletionPopupIfChanged(const std::vector<features::CompletionItem>& items,
-                                          int row, int col, int screen_w, int screen_h) {
+                                          int row, int col, int screen_w, int screen_h,
+                                          const std::string& query) {
+    auto popup_show_start = std::chrono::high_resolution_clock::now();
+    LOG("[COMPLETION] ===== showCompletionPopupIfChanged() START =====");
+    LOG("[COMPLETION] Items count: " + std::to_string(items.size()) + ", query: '" + query + "'");
+
     auto now = std::chrono::steady_clock::now();
     int count = static_cast<int>(items.size());
 
@@ -882,7 +1036,7 @@ void Editor::showCompletionPopupIfChanged(const std::vector<features::Completion
     auto elapsed =
         std::chrono::duration_cast<std::chrono::milliseconds>(now - last_popup_shown_time_);
     if (completion_popup_.isVisible() && last_popup_shown_count_ == count &&
-        last_popup_row_ == row && last_popup_col_ == col && elapsed.count() < 200) {
+        last_popup_row_ == row && last_popup_col_ == col && elapsed.count() < 50) {
         return;
     }
 
@@ -893,7 +1047,14 @@ void Editor::showCompletionPopupIfChanged(const std::vector<features::Completion
     last_popup_col_ = col;
 
     completion_popup_.show(items, static_cast<size_t>(row), static_cast<size_t>(col), screen_w,
-                           screen_h);
+                           screen_h, query);
+
+    auto popup_show_end = std::chrono::high_resolution_clock::now();
+    auto popup_show_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(popup_show_end - popup_show_start)
+            .count();
+    LOG("[COMPLETION] ===== showCompletionPopupIfChanged() END =====");
+    LOG("[COMPLETION] Popup show time: " + std::to_string(popup_show_duration) + "ms");
 }
 
 void Editor::showDiagnosticsPopup() {

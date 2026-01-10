@@ -80,17 +80,44 @@ namespace core {
 
 // UI渲染
 Element Editor::renderUI() {
+    // 检查是否暂停渲染
+    if (rendering_paused_) {
+        needs_render_ = true;
+        return last_rendered_element_; // 返回上次渲染结果
+    }
+
+    // 增量渲染优化：抑制快速的光标移动渲染
+    auto current_time = std::chrono::steady_clock::now();
+    auto time_since_last_render = current_time - last_render_time_;
+
+    // 如果距离上次渲染不足16ms，抑制本次渲染（除了撤销操作等重要更新）
+    if (time_since_last_render >= MIN_RENDER_INTERVAL ||
+        (last_render_source_.find("resumeRendering") != std::string::npos ||
+         last_render_source_.find("Event::Custom") != std::string::npos)) {
+        // 允许渲染，更新时间戳
+        last_render_time_ = current_time;
+        last_render_source_ = "";
+        pending_cursor_update_ = false;
+    } else {
+        // 标记有待处理的更新，稍后会通过定时器或事件触发
+        pending_cursor_update_ = true;
+        // 返回上次渲染结果，避免闪烁
+        return last_rendered_element_;
+    }
+
     // 使用 UIRouter 进行渲染（如果已初始化）
     // 注意：目前 UIRouter 只处理基本的布局和边框，对话框等仍使用原有逻辑
     if (ui_router_) {
         Element main_ui = ui_router_->render(this);
 
         // 叠加对话框（如果打开）- 这部分仍使用原有逻辑
-        return overlayDialogs(main_ui);
+        last_rendered_element_ = overlayDialogs(main_ui);
+        return last_rendered_element_;
     }
 
     // 如果 UIRouter 未初始化，使用原有逻辑
-    return renderUILegacy();
+    last_rendered_element_ = renderUILegacy();
+    return last_rendered_element_;
 }
 
 // 原有的 UI 渲染逻辑（保留作为后备）

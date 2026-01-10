@@ -19,6 +19,14 @@ namespace core {
 
 // 事件处理
 void Editor::handleInput(Event event) {
+    // 特殊处理Event::Custom（我们的渲染触发事件）
+    if (event == Event::Custom) {
+        LOG("[DEBUG EVENT] Received Event::Custom - this should trigger a render update");
+        // Event::Custom是我们手动触发的渲染更新事件，不需要额外处理
+        // 直接返回，让FTXUI重新渲染
+        return;
+    }
+
     // 记录事件处理开始（仅对关键事件）
     if (event == Event::Return || event == Event::Escape || event == Event::ArrowUp ||
         event == Event::ArrowDown || event == Event::ArrowLeft || event == Event::ArrowRight) {
@@ -36,12 +44,13 @@ void Editor::handleInput(Event event) {
     region_manager_.setHelpWindowEnabled(show_help_);
 
     // 使用 InputRouter 处理输入（如果已初始化）
-    // 支持终端和文件浏览器区域
+    // 支持终端、文件浏览器和Git面板区域
     if (input_router_) {
-        // 如果当前在终端或文件浏览器区域，使用 InputRouter
+        // 如果当前在终端、文件浏览器或Git面板区域，使用 InputRouter
         EditorRegion current_region = region_manager_.getCurrentRegion();
         if (current_region == EditorRegion::TERMINAL ||
-            current_region == EditorRegion::FILE_BROWSER) {
+            current_region == EditorRegion::FILE_BROWSER ||
+            current_region == EditorRegion::GIT_PANEL) {
             if (input_router_->route(event, this)) {
                 LOG("InputRouter handled event for region: " + region_manager_.getRegionName());
                 return;
@@ -460,7 +469,15 @@ void Editor::handleInput(Event event) {
             break;
     }
 
-    adjustViewOffset();
+    // 检查是否有待处理的光标更新需要触发
+    auto now = std::chrono::steady_clock::now();
+    if (pending_cursor_update_ && (now - last_render_time_) >= CURSOR_UPDATE_DELAY) {
+        LOG("[DEBUG INCREMENTAL] Auto-triggering pending cursor update after delay");
+        triggerPendingCursorUpdate();
+    }
+
+    // 移除全局的adjustViewOffset调用，避免与特定操作中的调用重复
+    // 各个操作（如moveCursorUp等）已经负责调用adjustViewOffset
 
     // 注意：退出逻辑现在在 quit() 方法中直接处理
     // 这里保留检查是为了兼容性，但通常不会到达这里
