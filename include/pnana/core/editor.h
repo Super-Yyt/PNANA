@@ -51,6 +51,7 @@
 #include "features/lsp/lsp_request_manager.h"
 #include "features/lsp/lsp_server_manager.h"
 #include "features/lsp/lsp_worker_pool.h"
+#include "features/lsp/snippet_manager.h"
 #include "ui/completion_popup.h"
 #include "ui/diagnostics_popup.h"
 #endif
@@ -101,6 +102,10 @@ class Editor {
 #ifdef BUILD_LUA_SUPPORT
     // 友元类：允许LuaAPI访问私有方法
     friend class plugins::LuaAPI;
+#endif
+#ifdef BUILD_LSP_SUPPORT
+    // 友元类：允许SnippetManager访问私有方法
+    friend class features::SnippetManager;
 #endif
 
   public:
@@ -379,7 +384,8 @@ class Editor {
 
     // 文档更新防抖（阶段1优化）
     std::chrono::steady_clock::time_point last_document_update_time_;
-    std::chrono::milliseconds document_update_debounce_interval_{200}; // 200ms 防抖间隔
+    std::chrono::milliseconds document_update_debounce_interval_{
+        50}; // 50ms 防抖间隔，与completion保持一致
     std::string pending_document_uri_;
     std::string pending_document_content_;
     int pending_document_version_;
@@ -396,6 +402,9 @@ class Editor {
     // 请求队列与线程池（阶段2优化）
     std::unique_ptr<features::LspRequestManager> lsp_request_manager_;
     std::unique_ptr<features::LspWorkerPool> lsp_worker_pool_;
+
+    // 代码片段管理器
+    std::unique_ptr<features::SnippetManager> snippet_manager_;
 
     // 文档变更跟踪器（阶段2优化）
     std::unique_ptr<features::DocumentChangeTracker> document_change_tracker_;
@@ -465,6 +474,30 @@ class Editor {
 
     // UI更新控制
     bool force_ui_update_;
+
+    // 渲染调试信息
+    size_t render_call_count_ = 0;
+    size_t undo_operation_count_ = 0;
+    std::chrono::steady_clock::time_point last_debug_stats_time_;
+    static constexpr auto DEBUG_STATS_INTERVAL = std::chrono::seconds(5);
+
+    // 渲染批处理控制（方案1）
+    bool rendering_paused_ = false;
+    bool needs_render_ = false;
+    std::chrono::steady_clock::time_point last_call_time_;
+
+    // 全局渲染追踪
+    std::string last_render_source_;
+    ftxui::Element last_rendered_element_;
+
+    // 增量渲染优化（方案6）
+    std::chrono::steady_clock::time_point last_render_time_;
+    bool pending_cursor_update_ = false;
+    static constexpr auto MIN_RENDER_INTERVAL = std::chrono::milliseconds(16); // ~60fps
+    static constexpr auto CURSOR_UPDATE_DELAY = std::chrono::milliseconds(50); // 延迟更新时间
+
+    // 强制触发待处理的光标更新
+    void triggerPendingCursorUpdate();
 
     // FTXUI
     ftxui::ScreenInteractive screen_;
@@ -598,7 +631,12 @@ class Editor {
     void updateLspDocument();
     ftxui::Element renderCompletionPopup();
     void showCompletionPopupIfChanged(const std::vector<features::CompletionItem>& items, int row,
-                                      int col, int screen_w, int screen_h);
+                                      int col, int screen_w, int screen_h,
+                                      const std::string& query = "");
+
+    // LSP 补全上下文分析辅助函数
+    std::string getSemanticContext(const std::string& line_content, size_t cursor_pos);
+    std::string getTriggerCharacter(const std::string& line_content, size_t cursor_pos);
 
     // 诊断相关方法
     void showDiagnosticsPopup();
@@ -612,6 +650,25 @@ class Editor {
     // 获取当前文档（便捷方法）
     Document* getCurrentDocument();
     const Document* getCurrentDocument() const;
+
+    // 渲染批处理控制（方案1）
+    void pauseRendering();
+    void resumeRendering();
+
+    // 状态变更优化（方案4）
+    void adjustCursorAndViewConservative();
+    void adjustCursorAndViewForRedo();
+
+    // 高级撤销优化（方案5）
+    void prepareForStaticUndo(size_t change_row, size_t change_col);
+    void performStaticUndo(size_t change_row, size_t change_col);
+    void performSmartStaticUndo(size_t change_row, size_t change_col,
+                                DocumentChange::Type change_type);
+    void prepareForStaticRedo(size_t change_row, size_t change_col);
+    void performStaticRedo(size_t change_row, size_t change_col);
+
+    // 调试辅助
+    std::string getCallStackInfo();
 
 #ifdef BUILD_LUA_SUPPORT
     // 插件系统

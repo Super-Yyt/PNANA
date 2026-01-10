@@ -74,7 +74,8 @@ class Document {
 
     // 撤销/重做
     // undo 返回是否成功，并通过输出参数返回修改位置
-    bool undo(size_t* out_row = nullptr, size_t* out_col = nullptr);
+    bool undo(size_t* out_row = nullptr, size_t* out_col = nullptr,
+              DocumentChange::Type* out_type = nullptr);
     bool redo(size_t* out_row = nullptr, size_t* out_col = nullptr);
     void pushChange(const DocumentChange& change);
     void clearHistory();
