@@ -1,4 +1,4 @@
-#include "vgit/git_panel.h"
+#include "ui/git_panel.h"
 #include "ui/icons.h"
 #include "utils/logger.h"
 #include <algorithm>
@@ -21,8 +21,10 @@ GitPanel::GitPanel(ui::Theme& theme, const std::string& repo_path)
 }
 
 Component GitPanel::getComponent() {
-    // 总是重新构建组件以确保状态变化被反映
-    main_component_ = buildMainComponent();
+    // 只在初次创建或模式切换时重新构建组件
+    if (!main_component_) {
+        main_component_ = buildMainComponent();
+    }
     return main_component_;
 }
 
@@ -140,6 +142,7 @@ void GitPanel::refreshStatusOnly() {
             files_ = std::move(files);
             error_message_ = std::move(error);
             data_loading_ = false;
+            stats_cache_valid_ = false; // Invalidate stats cache when data changes
 
             auto async_end = std::chrono::high_resolution_clock::now();
             auto async_duration =
@@ -189,6 +192,7 @@ void GitPanel::refreshData() {
             std::lock_guard<std::mutex> lock(data_mutex_);
             files_ = std::move(files);
             error_message_ = std::move(error);
+            stats_cache_valid_ = false; // Invalidate stats cache when data changes
 
             // 分支数据变化较少，只有在第一次加载或明确需要时才获取
             if (branches_.empty() || branch_data_stale_) {
@@ -498,15 +502,12 @@ Element GitPanel::renderStatusPanel() {
 
     Elements file_elements;
 
-    // Enhanced header with status summary
-    size_t staged_count = 0, unstaged_count = 0;
-    for (const auto& file : files_) {
-        if (file.staged) {
-            staged_count++;
-        } else {
-            unstaged_count++;
-        }
+    // Enhanced header with status summary (use cached stats for performance)
+    if (!stats_cache_valid_) {
+        updateCachedStats();
     }
+    size_t staged_count = cached_staged_count_;
+    size_t unstaged_count = cached_unstaged_count_;
 
     Elements header_elements = {
         text(pnana::ui::icons::GIT) | color(colors.function),
@@ -524,7 +525,18 @@ Element GitPanel::renderStatusPanel() {
 
     // File list with improved scrolling and display
     size_t start = scroll_offset_;
-    size_t visible_count = 25; // Show more files at once for better overview
+    size_t base_visible_count = 40; // Base number of files to show
+
+    // Auto-expand visible area when nearing the end
+    size_t remaining_files = files_.size() - start;
+    size_t visible_count = std::min(base_visible_count, remaining_files);
+
+    // If we're showing fewer than base_visible_count, show all remaining files
+    if (remaining_files < base_visible_count && start > 0) {
+        // Show more files when nearing the end
+        visible_count = std::min(base_visible_count + 10, remaining_files);
+    }
+
     size_t end = std::min(start + visible_count, files_.size());
 
     for (size_t i = start; i < end; ++i) {
@@ -556,15 +568,12 @@ Element GitPanel::renderCommitPanel() {
     elements.push_back(hbox(std::move(header_elements)));
     elements.push_back(separator());
 
-    // Staged files summary with better visualization
-    size_t staged_count = 0, unstaged_count = 0;
-    for (const auto& file : files_) {
-        if (file.staged) {
-            staged_count++;
-        } else {
-            unstaged_count++;
-        }
+    // Staged files summary with better visualization (use cached stats for performance)
+    if (!stats_cache_valid_) {
+        updateCachedStats();
     }
+    size_t staged_count = cached_staged_count_;
+    size_t unstaged_count = cached_unstaged_count_;
 
     Elements summary_elements = {text(pnana::ui::icons::SAVED) | color(colors.success),
                                  text(" Staged: ") | color(colors.menubar_fg),
@@ -984,7 +993,7 @@ Element GitPanel::renderFooter() {
     // Add scroll indicator if needed
     if (current_mode_ == GitPanelMode::STATUS && files_.size() > 25) {
         size_t total_pages = (files_.size() + 24) / 25; // Ceiling division
-        size_t current_page = scroll_offset_ / 25 + 1;
+        size_t current_page = scroll_offset_ / 40 + 1;
         std::string scroll_info =
             " [" + std::to_string(current_page) + "/" + std::to_string(total_pages) + "]";
         footer_elements.push_back(text(scroll_info) | color(colors.menubar_fg));
@@ -1014,51 +1023,74 @@ Element GitPanel::separatorLight() {
 
 Component GitPanel::buildMainComponent() {
     return Renderer([this] {
-        if (!visible_)
-            return emptyElement();
+               if (!visible_)
+                   return emptyElement();
 
-        auto& colors = theme_.getColors();
+               auto& colors = theme_.getColors();
 
-        Elements content_elements;
-        content_elements.push_back(renderHeader());
-        content_elements.push_back(renderTabs());
-        content_elements.push_back(separator());
+               Elements content_elements;
+               content_elements.push_back(renderHeader());
+               content_elements.push_back(renderTabs());
+               content_elements.push_back(separator());
 
-        switch (current_mode_) {
-            case GitPanelMode::STATUS:
-                content_elements.push_back(renderStatusPanel());
-                break;
-            case GitPanelMode::COMMIT:
-                content_elements.push_back(renderCommitPanel());
-                break;
-            case GitPanelMode::BRANCH:
-                content_elements.push_back(renderBranchPanel());
-                break;
-            case GitPanelMode::REMOTE:
-                content_elements.push_back(renderRemotePanel());
-                break;
-        }
+               switch (current_mode_) {
+                   case GitPanelMode::STATUS:
+                       content_elements.push_back(renderStatusPanel());
+                       break;
+                   case GitPanelMode::COMMIT:
+                       content_elements.push_back(renderCommitPanel());
+                       break;
+                   case GitPanelMode::BRANCH:
+                       content_elements.push_back(renderBranchPanel());
+                       break;
+                   case GitPanelMode::REMOTE:
+                       content_elements.push_back(renderRemotePanel());
+                       break;
+               }
 
-        if (!error_message_.empty()) {
-            content_elements.push_back(separatorLight());
-            content_elements.push_back(renderError());
-        }
+               if (!error_message_.empty()) {
+                   content_elements.push_back(separatorLight());
+                   content_elements.push_back(renderError());
+               }
 
-        content_elements.push_back(separator());
-        content_elements.push_back(renderFooter());
+               content_elements.push_back(separator());
+               content_elements.push_back(renderFooter());
 
-        Element dialog_content = vbox(std::move(content_elements));
+               Element dialog_content = vbox(std::move(content_elements));
 
-        // Use window style like other dialogs with proper sizing
-        return window(text("Git Panel"), dialog_content) | size(WIDTH, GREATER_THAN, 75) |
-               size(HEIGHT, GREATER_THAN, 28) | bgcolor(colors.background) | border;
-    });
+               // Use window style like other dialogs with proper sizing
+               return window(text("Git Panel"), dialog_content) | size(WIDTH, GREATER_THAN, 75) |
+                      size(HEIGHT, GREATER_THAN, 28) | bgcolor(colors.background) | border;
+           }) |
+           CatchEvent([this](Event event) {
+               // Handle navigation events directly without rebuilding component
+               if (event == Event::ArrowUp || event == Event::ArrowDown || event == Event::PageUp ||
+                   event == Event::PageDown) {
+                   switch (current_mode_) {
+                       case GitPanelMode::STATUS:
+                           return handleStatusModeKey(event);
+                       case GitPanelMode::COMMIT:
+                           return handleCommitModeKey(event);
+                       case GitPanelMode::BRANCH:
+                           return handleBranchModeKey(event);
+                       case GitPanelMode::REMOTE:
+                           return handleRemoteModeKey(event);
+                   }
+               }
+               return false;
+           });
 }
 
 // Key handlers
 
 bool GitPanel::handleStatusModeKey(Event event) {
-    const size_t visible_items = 25; // Match renderStatusPanel visible count
+    // Calculate dynamic visible items (match renderStatusPanel logic)
+    size_t base_visible_items = 40;
+    size_t remaining_files = files_.size() - scroll_offset_;
+    size_t visible_items = std::min(base_visible_items, remaining_files);
+    if (remaining_files < base_visible_items && scroll_offset_ > 0) {
+        visible_items = std::min(base_visible_items + 10, remaining_files);
+    }
 
     // Fast navigation - minimal scrolling logic for better performance
     if (event == Event::ArrowUp) {
@@ -1074,7 +1106,7 @@ bool GitPanel::handleStatusModeKey(Event event) {
     if (event == Event::ArrowDown) {
         if (selected_index_ < files_.size() - 1) {
             selected_index_++;
-            // Only scroll when necessary
+            // Only scroll when necessary - use dynamic visible_items
             if (selected_index_ >= scroll_offset_ + visible_items) {
                 scroll_offset_ = selected_index_ - visible_items + 1;
             }
@@ -1402,6 +1434,21 @@ bool GitPanel::hasUnstagedChanges() const {
 }
 
 // Utility methods
+
+void GitPanel::updateCachedStats() {
+    cached_staged_count_ = 0;
+    cached_unstaged_count_ = 0;
+
+    for (const auto& file : files_) {
+        if (file.staged) {
+            cached_staged_count_++;
+        } else {
+            cached_unstaged_count_++;
+        }
+    }
+
+    stats_cache_valid_ = true;
+}
 
 bool GitPanel::isNavigationKey(Event event) const {
     return event == Event::ArrowUp || event == Event::ArrowDown || event == Event::PageUp ||

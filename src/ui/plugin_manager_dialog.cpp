@@ -1,5 +1,6 @@
 #include "ui/plugin_manager_dialog.h"
 #include "ui/icons.h"
+#include "utils/logger.h"
 #include <algorithm>
 
 using namespace ftxui;
