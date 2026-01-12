@@ -71,6 +71,9 @@
         "success": [50, 255, 50]
       }
     }
+  },
+  "plugins": {
+    "enabled_plugins": []
   }
 }
 
