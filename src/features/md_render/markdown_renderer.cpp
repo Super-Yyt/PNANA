@@ -352,7 +352,7 @@ ftxui::Element MarkdownRenderer::render_table(const std::shared_ptr<MarkdownElem
         table_num_cols_ = std::max(table_num_cols_, cols);
     }
     if (table_num_cols_ <= 0)
-        return vbox({});
+        return text("");
 
     table_col_widths_.assign(table_num_cols_, 0);
 
