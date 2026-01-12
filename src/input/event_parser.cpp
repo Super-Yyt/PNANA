@@ -1,4 +1,5 @@
 #include "input/event_parser.h"
+#include "utils/logger.h"
 #include <algorithm>
 #include <cctype>
 
@@ -370,6 +371,14 @@ std::string EventParser::parseSpaceKey(const ftxui::Event& event) const {
 }
 
 std::string EventParser::eventToKey(const ftxui::Event& event) const {
+    // 调试：记录所有按键事件
+    std::string event_input = event.input();
+    if (event_input.find("alt") != std::string::npos ||
+        event_input.find("w") != std::string::npos) {
+        LOG("[DEBUG EVENT] Event input: '" + event_input +
+            "', is_character: " + (event.is_character() ? "true" : "false"));
+    }
+
     // 按优先级顺序解析
 
     // 0. 特殊键（Tab、Shift+Tab等）优先处理，避免被 Ctrl 组合键误识别
