@@ -30,6 +30,16 @@ bool GitPanelHandler::handleInput(ftxui::Event event, Editor* editor) {
     // 将事件传递给GitPanel处理
     bool handled = editor->getGitPanel().onKeyPress(event);
 
+    // 如果GitPanel没有处理Tab键，则将其作为区域切换
+    if (!handled && event == Event::Tab) {
+        pnana::utils::Logger::getInstance().log(
+            "GitPanelHandler::handleInput - Tab not handled by GitPanel, switching to code area");
+        // 从Git面板切换到代码区域
+        editor->getRegionManager().setRegion(EditorRegion::CODE_AREA);
+        editor->setStatusMessage("Switched to Code Area | Ctrl+G: Git Panel");
+        handled = true;
+    }
+
     // 如果事件被处理，强制UI更新
     if (handled) {
         auto ui_update_start = std::chrono::high_resolution_clock::now();
@@ -71,7 +81,7 @@ bool GitPanelHandler::handleNavigation(ftxui::Event event, Editor* editor) {
         return false;
     }
 
-    // Git面板的导航：Esc关闭面板，Tab切换区域
+    // Git面板的导航：Esc关闭面板
     if (event == Event::Escape) {
         editor->toggleGitPanel();
         auto end_time = std::chrono::high_resolution_clock::now();
@@ -83,18 +93,8 @@ bool GitPanelHandler::handleNavigation(ftxui::Event event, Editor* editor) {
         return true;
     }
 
-    if (event == Event::Tab) {
-        // 从Git面板切换到代码区域
-        editor->getRegionManager().setRegion(EditorRegion::CODE_AREA);
-        editor->setStatusMessage("Switched to Code Area | Ctrl+G: Git Panel");
-        auto end_time = std::chrono::high_resolution_clock::now();
-        auto duration =
-            std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        pnana::utils::Logger::getInstance().log(
-            "GitPanelHandler::handleNavigation - END (tab switch) - " +
-            std::to_string(duration.count()) + "ms");
-        return true;
-    }
+    // 注意：Tab键现在由GitPanel的onKeyPress方法处理，用于标签切换
+    // 不在这里拦截Tab键，让它传递到GitPanel进行内部标签切换
 
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
