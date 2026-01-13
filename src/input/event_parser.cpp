@@ -273,6 +273,23 @@ std::string EventParser::parseAltKey(const ftxui::Event& event) const {
 
     // 在终端中，Alt+字符通常被编码为 ESC 字符（\033 或 \x1b，ASCII 27）后跟字符
     // 例如：Alt+A → \033a 或 \x1ba
+    // 另外有些终端会把 Alt+箭头 编码为 CSI 序列, 比如 ESC [ 1 ; 3 D
+    // 这种情况下 input 会以 ESC '[' 开头并以 'A','B','C','D' 结尾
+    if (input.length() >= 3 && (input[0] == '\033' || input[0] == '\x1b') && input[1] == '[') {
+        char final_char = input.back();
+        switch (final_char) {
+            case 'A':
+                return "alt_arrow_up";
+            case 'B':
+                return "alt_arrow_down";
+            case 'C':
+                return "alt_arrow_right";
+            case 'D':
+                return "alt_arrow_left";
+            default:
+                break;
+        }
+    }
     if (input.length() >= 2) {
         // 检查是否是 ESC 序列（\033 或 \x1b）
         if (input[0] == '\033' || input[0] == '\x1b') {
@@ -286,7 +303,8 @@ std::string EventParser::parseAltKey(const ftxui::Event& event) const {
                     return "alt_space";
                 }
                 c = std::tolower(c);
-                if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+                if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '=' || c == '+' ||
+                    c == '-' || c == '_') {
                     return "alt_" + std::string(1, c);
                 }
             }
@@ -371,14 +389,6 @@ std::string EventParser::parseSpaceKey(const ftxui::Event& event) const {
 }
 
 std::string EventParser::eventToKey(const ftxui::Event& event) const {
-    // 调试：记录所有按键事件
-    std::string event_input = event.input();
-    if (event_input.find("alt") != std::string::npos ||
-        event_input.find("w") != std::string::npos) {
-        LOG("[DEBUG EVENT] Event input: '" + event_input +
-            "', is_character: " + (event.is_character() ? "true" : "false"));
-    }
-
     // 按优先级顺序解析
 
     // 0. 特殊键（Tab、Shift+Tab等）优先处理，避免被 Ctrl 组合键误识别
