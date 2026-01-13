@@ -41,7 +41,7 @@ Abandoning the learning curve of traditional Vim, pnana adopts intuitive shortcu
 
 #### Multi-File Support
 - **Tab System**: Open multiple files simultaneously
-- **Split Editing**: Horizontal/vertical split screens
+- **Split Editing**: Horizontal/vertical split screens （planned）
 - **Quick Switching**: Fast file switching with keyboard and mouse
 
 #### Smart Editing
