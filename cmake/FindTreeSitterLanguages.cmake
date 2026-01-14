@@ -95,7 +95,7 @@ find_tree_sitter_language(NIM "tree-sitter-nim;libtree-sitter-nim" "Nim")
 find_tree_sitter_language(LISP "tree-sitter-commonlisp;libtree-sitter-commonlisp" "Lisp")
 find_tree_sitter_language(SML "tree-sitter-sml;libtree-sitter-sml" "SML")
 find_tree_sitter_language(LLVM "tree-sitter-llvm;libtree-sitter-llvm" "LLVM IR")
-find_tree_sitter_language(ASM "tree-sitter-asm;libtree-sitter-asm" "Assembly")
+find_tree_sitter_language(RISCV "tree-sitter-riscv;libtree-sitter-riscv" "RISCV Assembly")
 
 # 标记为高级变量
 mark_as_advanced(
@@ -135,6 +135,5 @@ mark_as_advanced(
     TreeSitter_LISP_LIBRARY
     TreeSitter_SML_LIBRARY
     TreeSitter_LLVM_LIBRARY
-    TreeSitter_ASM_LIBRARY
+    TreeSitter_RISCV_LIBRARY
 )
-
