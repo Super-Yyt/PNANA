@@ -23,12 +23,17 @@ function(find_tree_sitter_language lang_name lib_names display_name)
         NAMES ${lib_names}
         PATHS
             /usr/lib
+            /usr/lib64
             /usr/local/lib
+            /usr/local/lib64
             /usr/lib/x86_64-linux-gnu
             /opt/local/lib
+            /opt/homebrew/lib
+            /usr/local/opt
             ${CMAKE_SOURCE_DIR}/third-party
             ~/.local/lib
             ${CMAKE_INSTALL_PREFIX}/lib
+            ${CMAKE_INSTALL_PREFIX}/lib64
         PATH_SUFFIXES
             lib
             lib64
