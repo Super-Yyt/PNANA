@@ -57,6 +57,8 @@ Editor::Editor()
       screen_(ScreenInteractive::Fullscreen()) {
     // 初始化 last_rendered_element_ 为有效的 ftxui 元素，避免空元素导致的崩溃
     last_rendered_element_ = ftxui::text("Initializing...");
+    // 确保首次调用 renderUI() 时不会被增量渲染逻辑跳过，强制进行一次完整渲染
+    force_ui_update_ = true;
 
     // 加载配置文件（使用默认路径）
     loadConfig();
@@ -119,7 +121,9 @@ void Editor::run() {
                                      handleInput(event);
                                      return true;
                                  });
-
+    // Post a Custom event so ftxui performs an initial render immediately
+    // (ensures renderUI() runs once even if incremental-render logic would skip it)
+    screen_.PostEvent(Event::Custom);
     screen_.Loop(main_component_);
 
 #ifdef BUILD_LSP_SUPPORT
