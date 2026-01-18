@@ -239,6 +239,7 @@ set(SOURCES
     src/utils/clipboard.cpp
     src/utils/file_type_detector.cpp
     src/utils/file_type_icon_mapper.cpp
+    src/utils/assembly_analyzer.cpp
     # Markdown 解析库
     third-party/md4c/md4c.c
     # 功能模块
@@ -395,6 +396,7 @@ set(HEADERS
     include/pnana/utils/text_analyzer.h
     include/pnana/utils/clipboard.h
     include/pnana/utils/file_type_detector.h
+    include/pnana/utils/assembly_analyzer.h
 )
 
 # Tree-sitter 模块头文件（如果启用）
