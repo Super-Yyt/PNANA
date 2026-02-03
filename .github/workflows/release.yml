@@ -1,16 +1,14 @@
----
 name: Release
 
 permissions:
-  contents: write  # Required to create tags and releases
-  packages: write  # Required for package uploads
+  contents: write
+  packages: write
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g., 1.0.0).
-          If not provided, will extract from CHANGELOG.md'
+        description: 'Release version (e.g., 1.0.0). If not provided, will extract from CHANGELOG.md'
         required: false
         type: string
       release_type:
@@ -35,6 +33,367 @@ on:
       - 'CHANGELOG.md'
 
 env:
+  BUILD_TYPE: Release
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract-version.outputs.version }}
+      release_notes: ${{ steps.generate-notes.outputs.release_notes }}
+      tag_name: ${{ steps.extract-version.outputs.tag_name }}
+      should_release: ${{ steps.check-release.outputs.should_release }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from CHANGELOG.md
+        id: extract-version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(grep -E '^\#\# \[[0-9]+\.[0-9]+\.[0-9]+\]' \
+              CHANGELOG.md | head -1 | \
+              sed -E 's/^\#\# \[([0-9]+\.[0-9]+\.[0-9]+)\].*/\1/')
+            if [ -z "$VERSION" ]; then
+              echo "Error: Could not extract version from CHANGELOG.md"
+              exit 1
+            fi
+          fi
+
+          RELEASE_TYPE="${{ github.event.inputs.release_type || 'stable' }}"
+          if [ "$RELEASE_TYPE" = "stable" ]; then
+            TAG_NAME="v${VERSION}"
+          else
+            TAG_NAME="v${VERSION}-${RELEASE_TYPE}"
+          fi
+
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Check if release should be created
+        id: check-release
+        run: |
+          if git tag -l "${{ steps.extract-version.outputs.tag_name }}" | \
+              grep -q "${{ steps.extract-version.outputs.tag_name }}"; then
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate release notes
+        id: generate-notes
+        if: steps.check-release.outputs.should_release == 'true'
+        run: |
+          VERSION="${{ steps.extract-version.outputs.version }}"
+          RELEASE_TYPE="${{ github.event.inputs.release_type || 'stable' }}"
+
+          RELEASE_NOTES=$(awk -v version="$VERSION" '
+          BEGIN { found=0; in_section=0 }
+          /^\#\# \['version'\]/ { found=1; in_section=1; next }
+          /^\#\# \[/ && found { exit }
+          in_section && /^### / { print "## " $2; next }
+          in_section && /^-/ { print $0; next }
+          ' CHANGELOG.md)
+
+          if [ -z "$RELEASE_NOTES" ]; then
+            RELEASE_NOTES="## New Features
+          - Release notes will be generated based on CHANGELOG.md
+
+          ## Improvements
+          - Automated release process
+
+          ## Fixes
+          - Bug fixes and improvements"
+          fi
+
+          RELEASE_NOTES="# Release v${VERSION}
+
+          ${RELEASE_NOTES}
+
+          ## Installation
+
+          ### Ubuntu/Debian (.deb)
+          #### For x86_64:
+          \`\`\`bash
+          wget https://github.com/${{ github.repository }}/releases/download/\
+            v${VERSION}/pnana_${VERSION}_amd64.deb
+          sudo dpkg -i pnana_${VERSION}_amd64.deb
+          sudo apt-get install -f
+          \`\`\`
+
+          #### For ARM64:
+          \`\`\`bash
+          wget https://github.com/${{ github.repository }}/releases/download/\
+            v${VERSION}/pnana_${VERSION}_arm64.deb
+          sudo dpkg -i pnana_${VERSION}_arm64.deb
+          sudo apt-get install -f
+          \`\`\`
+
+          ### Red Hat/Fedora/CentOS (.rpm)
+          \`\`\`bash
+          wget https://github.com/${{ github.repository }}/releases/download/\
+            v${VERSION}/pnana_${VERSION}_x86_64.rpm
+          sudo rpm -i pnana_${VERSION}_x86_64.rpm
+          \`\`\`
+
+          ### Generic Linux
+          Choose the appropriate archive for your system:
+          - x86_64: \`pnana-ubuntu22.04.tar.gz\`
+          - ARM64: \`pnana-ubuntu22.04-arm64.tar.gz\`
+
+          \`\`\`bash
+          # For x86_64
+          wget https://github.com/${{ github.repository }}/releases/download/\
+            v${VERSION}/pnana-ubuntu22.04.tar.gz
+          tar -xzf pnana-ubuntu22.04.tar.gz
+          cd pnana-ubuntu22.04
+          sudo ./install.sh
+
+          # For ARM64
+          wget https://github.com/${{ github.repository }}/releases/download/\
+            v${VERSION}/pnana-ubuntu22.04-arm64.tar.gz
+          tar -xzf pnana-ubuntu22.04-arm64.tar.gz
+          cd pnana-ubuntu22.04-arm64
+          sudo ./install.sh
+          \`\`\`
+
+          ## Usage
+          \`\`\`bash
+          pnana
+          pnana filename.txt
+          pnana --help
+          \`\`\`
+
+          ## What's Changed
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/\
+            blob/main/CHANGELOG.md) for full details."
+
+          RELEASE_NOTES="${RELEASE_NOTES//'%'/'%25'}"
+          RELEASE_NOTES="${RELEASE_NOTES//$'\n'/'%0A'}"
+          RELEASE_NOTES="${RELEASE_NOTES//$'\r'/'%0D'}"
+
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  build-multiarch:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        package_type: [DEB, TGZ, ZIP, TXZ, TBZ2]
+        exclude:
+          - arch: arm64
+            package_type: DEB
+          - arch: arm64
+            package_type: TGZ
+          - arch: arm64
+            package_type: ZIP
+          - arch: arm64
+            package_type: TXZ
+          - arch: arm64
+            package_type: TBZ2
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            sudo dpkg --add-architecture arm64
+            sudo apt-get install -y \
+              gcc-aarch64-linux-gnu \
+              g++-aarch64-linux-gnu \
+              crossbuild-essential-arm64
+          fi
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            build-essential \
+            pkg-config \
+            dpkg-dev \
+            rpm \
+            libarchive-tools \
+            git \
+            ccache
+
+      - name: Build and install FTXUI
+        run: |
+          git clone --depth 1 --branch main \
+            https://github.com/ArthurSonzogni/FTXUI.git
+          cd FTXUI
+          mkdir build && cd build
+          
+          CMAKE_FLAGS=" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_INSTALL_PREFIX=/usr/local \
+            -DFTXUI_BUILD_EXAMPLES=OFF \
+            -DFTXUI_BUILD_DOCS=OFF \
+            -DFTXUI_ENABLE_INSTALL=ON"
+            
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            CMAKE_FLAGS="$CMAKE_FLAGS \
+              -DCMAKE_SYSTEM_NAME=Linux \
+              -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+              -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+              -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+              -DCMAKE_INSTALL_PREFIX=/usr/aarch64-linux-gnu"
+          fi
+          
+          cmake .. $CMAKE_FLAGS
+          make -j$(nproc)
+          sudo make install
+          cd ../..
+          rm -rf FTXUI
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build-${{ matrix.arch }}
+          cd build-${{ matrix.arch }}
+          
+          CMAKE_FLAGS=" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/usr/local \
+            -DBUILD_IMAGE_PREVIEW=OFF \
+            -DBUILD_TREE_SITTER=OFF \
+            -DBUILD_LUA=OFF \
+            -DBUILD_GO=OFF"
+            
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            CMAKE_FLAGS="$CMAKE_FLAGS \
+              -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+              -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+              -DCMAKE_SYSTEM_NAME=Linux \
+              -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+              -DCMAKE_FIND_ROOT_PATH=/usr/aarch64-linux-gnu"
+          fi
+          
+          cmake .. $CMAKE_FLAGS
+
+      - name: Build project
+        run: |
+          cd build-${{ matrix.arch }}
+          ninja -j$(nproc)
+
+      - name: Create package
+        run: |
+          cd build-${{ matrix.arch }}
+          
+          if [ "${{ matrix.arch }}" = "amd64" ]; then
+            ARCH_SUFFIX=""
+            DEB_ARCH="amd64"
+            RPM_ARCH="x86_64"
+          else
+            ARCH_SUFFIX="-arm64"
+            DEB_ARCH="arm64"
+            RPM_ARCH="aarch64"
+          fi
+          
+          if [ "${{ matrix.package_type }}" = "DEB" ]; then
+            echo "set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE $DEB_ARCH)" >> CPackConfig.cmake
+            PACKAGE_NAME="pnana_${{ needs.prepare-release.outputs.version }}_$DEB_ARCH.deb"
+          elif [ "${{ matrix.package_type }}" = "RPM" ]; then
+            echo "set(CPACK_RPM_PACKAGE_ARCHITECTURE $RPM_ARCH)" >> CPackConfig.cmake
+            PACKAGE_NAME="pnana_${{ needs.prepare-release.outputs.version }}_$RPM_ARCH.rpm"
+          else
+            PACKAGE_NAME="pnana-ubuntu22.04$ARCH_SUFFIX"
+          fi
+          
+          cpack -G ${{ matrix.package_type }}
+          
+          for file in *; do
+            if [ -f "$file" ]; then
+              if [[ "$file" == *.deb && "${{ matrix.arch }}" == "amd64" ]]; then
+                mv "$file" "pnana_${{ needs.prepare-release.outputs.version }}_amd64.deb"
+              elif [[ "$file" == *.deb && "${{ matrix.arch }}" == "arm64" ]]; then
+                mv "$file" "pnana_${{ needs.prepare-release.outputs.version }}_arm64.deb"
+              elif [[ "$file" == *.rpm && "${{ matrix.arch }}" == "amd64" ]]; then
+                mv "$file" "pnana_${{ needs.prepare-release.outputs.version }}_x86_64.rpm"
+              elif [[ "$file" == *.tar.gz && "${{ matrix.arch }}" == "amd64" ]]; then
+                mv "$file" "pnana-ubuntu22.04.tar.gz"
+              elif [[ "$file" == *.tar.gz && "${{ matrix.arch }}" == "arm64" ]]; then
+                mv "$file" "pnana-ubuntu22.04-arm64.tar.gz"
+              elif [[ "$file" == *.zip && "${{ matrix.arch }}" == "amd64" ]]; then
+                mv "$file" "pnana-ubuntu22.04.zip"
+              elif [[ "$file" == *.zip && "${{ matrix.arch }}" == "arm64" ]]; then
+                mv "$file" "pnana-ubuntu22.04-arm64.zip"
+              elif [[ "$file" == *.tar.xz && "${{ matrix.arch }}" == "amd64" ]]; then
+                mv "$file" "pnana-ubuntu22.04.tar.xz"
+              elif [[ "$file" == *.tar.xz && "${{ matrix.arch }}" == "arm64" ]]; then
+                mv "$file" "pnana-ubuntu22.04-arm64.tar.xz"
+              elif [[ "$file" == *.tar.bz2 && "${{ matrix.arch }}" == "amd64" ]]; then
+                mv "$file" "pnana-ubuntu22.04.tar.bz2"
+              elif [[ "$file" == *.tar.bz2 && "${{ matrix.arch }}" == "arm64" ]]; then
+                mv "$file" "pnana-ubuntu22.04-arm64.tar.bz2"
+              fi
+            fi
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.arch }}-${{ matrix.package_type }}
+          path: build-${{ matrix.arch }}/*
+          retention-days: 30
+
+  create-release:
+    needs: [prepare-release, build-multiarch]
+    if: needs.prepare-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: |
+          find artifacts -type f | head -20
+          ls -la artifacts/
+
+      - name: Create Git tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git config --local url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git tag ${{ needs.prepare-release.outputs.tag_name }}
+          git push origin ${{ needs.prepare-release.outputs.tag_name }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag_name }}
+          name: Release ${{ needs.prepare-release.outputs.tag_name }}
+          body: ${{ needs.prepare-release.outputs.release_notes }}
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          prerelease: ${{ github.event.inputs.release_type != 'stable' }}
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+            artifacts/**/*.tar.xz
+            artifacts/**/*.tar.bz2
+
+      - name: Update CHANGELOG.md after release
+        if: github.event_name == 'push'
+        run: |
+          echo "Release completed"env:
   BUILD_TYPE: Release
 
 jobs:
